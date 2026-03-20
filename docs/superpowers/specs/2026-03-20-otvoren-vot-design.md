@@ -24,7 +24,9 @@ The project includes both the software implementation and non-code deliverables 
 
 | Parameter | Value |
 |-----------|-------|
-| Components | ~15 services |
+| Components | 11 services (auth, collection, bulletin-board, tally, verification, web, dashboard, extension, machine, admin, CLI tools) |
+| Max parties | 50 |
+| Max candidates per party | 50 |
 | Trustees | 9 (adversarial institutions) |
 | Threshold | 5-of-9 |
 | Data centers | 2 (Sofia + Varna, documented architecture, Docker Compose for dev) |
@@ -47,6 +49,13 @@ Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol usi
 - Threshold: any 5-of-9 trustees can collectively decrypt; fewer than 5 learn nothing
 - Executed once per election, weeks before election day
 
+### 2.1.1 Key Lifecycle
+
+- **Distribution:** Election public key published on bulletin board, embedded in web app, and distributed via multiple independent channels (CIK website, political party websites, print media). Parties verify the key matches across all channels.
+- **Compromise response:** If a trustee's HSM is compromised or lost between DKG and election day, the remaining trustees run a re-sharing protocol to exclude the compromised share and issue new shares without changing the election public key (proactive secret sharing). If fewer than 5 shares remain uncompromised, a full new DKG is required.
+- **Validity period:** The election public key is valid only for the specific election. It is never reused.
+- **Destruction:** After the election results are certified and all legal challenge periods expire, trustees destroy their key shares by wiping their HSMs on camera. The destruction is logged and signed.
+
 ### 2.2 Ballot Encoding
 
 **Party vote:** Binary vector with one element per party. All zeros except position `i` = 1 for the chosen party. Example: 30 parties → vector of 30 values.
@@ -55,10 +64,16 @@ Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol usi
 
 ### 2.3 Ballot Encryption
 
-- Each vector element encrypted independently with **exponential ElGamal** on Curve25519 using the election public key
+**Cryptographic group:** Exponential ElGamal over the **Ristretto255** group (prime-order group derived from Curve25519, avoids cofactor issues). Ristretto255 provides a clean prime-order abstraction over the Ed25519 curve.
+
+**Implementation:** ElGamal is NOT a built-in libsodium primitive. We implement exponential ElGamal as custom code atop libsodium's low-level scalar/point arithmetic (`crypto_scalarmult_ed25519`, `crypto_core_ed25519_*` family). On the server side (Go), we use `filippo.io/edwards25519` or equivalent for the same group operations.
+
+- Each vector element encrypted independently with **exponential ElGamal** over Ristretto255 using the election public key
 - Exponential ElGamal is additively homomorphic: `Enc(a) * Enc(b) = Enc(a + b)`
-- Client-side encryption using `libsodium.js` (WASM, bundled with web app, hash-verifiable)
+- Client-side encryption using custom ElGamal built on `libsodium.js` scalar/point primitives (WASM, bundled with web app, hash-verifiable)
 - The election public key is embedded in the ballot page and published on the bulletin board
+
+**Performance budget:** Ballot encryption and proof generation must complete within 5 seconds on a mid-range 2024 laptop. For 50 parties with up to 50 candidates each (worst case: 50 + 2500 = 2550 encrypted elements + proofs), this requires benchmarking. If client-side proof generation exceeds 5 seconds, we use batched Sigma proofs to reduce computation.
 
 ### 2.4 Zero-Knowledge Proofs
 
@@ -85,7 +100,7 @@ Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol usi
 - HSM performs computation internally — key share never leaves the device
 - Each partial decryption accompanied by a Chaum-Pedersen proof of correctness
 - Partial decryptions combined to reveal plaintext sums
-- Final step: solve discrete log via baby-step giant-step (trivial for vote-count-sized numbers ≤ ~4M)
+- Final step: solve discrete log via baby-step giant-step. For N voters (≤ ~4M), BSGS requires O(√N) time and space per tally slot (~2000 steps). With up to 2550 tally slots (50 parties + 50×50 candidates), this completes in under 1 second on modern hardware.
 
 ### 2.7 ZK Deduplication Circuit (gnark)
 
@@ -106,7 +121,17 @@ Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol usi
 - The filtered set Merkle root is correctly computed from the included ballots
 - Count matches
 
-**Performance:** Recursive proof composition — split into batches of ~10,000 ballots, prove each batch independently, compose into a single aggregate proof. Parallel proving across CPU cores. Estimated 30-60 minutes on a 64-core server.
+**Dual-hash Merkle tree:** The bulletin board maintains two parallel Merkle trees:
+1. **Public tree** using SHA-256 — for public verification, API responses, and inclusion proofs. Standard, auditable by anyone.
+2. **SNARK tree** using Poseidon hash over the BN254 scalar field — used exclusively inside the gnark dedup circuit. Poseidon is SNARK-friendly (~250 constraints per hash vs. ~25,000 for SHA-256), making the circuit feasible.
+
+Both trees are computed on every append. The public tree is the canonical one for external verification. The SNARK tree exists solely to make the dedup proof computationally tractable.
+
+**What is inside vs. outside the SNARK:**
+- **Inside the SNARK:** Set membership verification (each active ballot ID has a valid Poseidon Merkle inclusion proof), active set commitment check, filtered set root computation, count check. All operations use BN254-native field arithmetic and Poseidon hashes.
+- **Outside the SNARK:** The homomorphic product (multiplying ElGamal ciphertexts over Ristretto255), threshold decryption, and tally correctness — all verified via separate Sigma/Chaum-Pedersen proofs over the ElGamal group. These two cryptographic worlds do not interact inside a circuit.
+
+**Performance:** Recursive proof composition — split into batches of ~10,000 ballots, prove each batch independently, compose into a single aggregate proof. Parallel proving across CPU cores. Estimated 30-60 minutes on a 64-core server (using SNARK-friendly Poseidon hashes, not SHA-256).
 
 ### 2.8 Verification Code Protocol (Browser Extension)
 
@@ -117,6 +142,21 @@ Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol usi
 - Return code sent to the extension's background script, displayed in the extension popup
 - Voter compares: return code matches their intended party's code from the mapping → vote is correct
 - Deterministic: same encrypted content always produces the same return code
+
+**Session binding protocol (extension ↔ Verification Service):**
+
+The extension must authenticate to the Verification Service without leaking voter identity to Layer 2. This is resolved via a **blinded session token** issued by Layer 1:
+
+1. After eAuth, Layer 1's Collection Server generates a one-time `session_token` for this voting session
+2. Collection Server blinds the token using a Schnorr blind signature: `blinded_token = Blind(session_token, voter_blinding_factor)`. The blinding ensures the token is unlinkable to the voter's ЕГН.
+3. Collection Server signs the blinded token and returns it to the browser
+4. Browser unblinds: `signed_token = Unblind(blinded_signed_token, voter_blinding_factor)`
+5. Browser passes `signed_token` to the extension (via `chrome.runtime.sendMessage` from the page to the extension)
+6. Extension presents `signed_token` to the Verification Service (Layer 2)
+7. Verification Service validates the signature (it knows Layer 1's signing public key) but cannot link the token to any voter — the blinding is irreversible
+8. Verification Service uses the `signed_token` as the session identifier for code mapping generation and return code delivery
+
+This preserves the two-layer separation: Layer 2 knows "this is a valid session" but not "this is voter X."
 
 ---
 
@@ -158,11 +198,20 @@ Layer 1 computes the "active ballot ID set" — for each ЕГН, the ballot_id o
 
 ### 3.5 Network Isolation
 
-- Layer 1 and Layer 2 on separate Docker networks
+- Layer 1 and Layer 2 on separate Docker networks (development). **In production, Layer 1 and Layer 2 run on physically separate infrastructure with hardware firewalls enforcing the one-way communication policy.** Docker Compose network isolation is for development only.
 - One-way internal API: Collection Server → Bulletin Board (submit ballot)
 - One-time handoff: Layer 1 → Tally Service (active ID set at polls close)
 - No return path — Layer 2 cannot query Layer 1
 - Bulletin Board public API is read-only
+
+### 3.6 Merkle Root Tamper-Evidence Protocol
+
+The bulletin board's "append-only" property is enforced at the application layer, not structurally by PostgreSQL. To provide external tamper-evidence:
+
+- **Periodic signed roots:** Every 60 seconds during the election, the Bulletin Board signs the current Merkle root with its service key and publishes it to the `/api/v1/board/root` endpoint.
+- **External anchoring:** Signed roots are simultaneously pushed to multiple independent monitors operated by political parties, NGOs, and media organizations. Each monitor stores the sequence of roots.
+- **Consistency verification:** Any monitor can verify that each new root is a consistent extension of the previous root (standard Merkle consistency proof). If the bulletin board retroactively modifies or deletes an entry, the root changes and the monitors detect the inconsistency.
+- **Post-election:** The complete sequence of signed roots is published as part of the election archive. Auditors can verify the full chain of consistency.
 
 ---
 
@@ -180,7 +229,7 @@ Layer 1 computes the "active ballot ID set" — for each ЕГН, the ballot_id o
 8. Select party, optionally select preferred candidate
 9. Review screen: "Вие избрахте: [party] / [candidate]"
 10. Confirm
-11. Browser encrypts ballot client-side (libsodium.js WASM), generates ZK proofs, generates random ballot_id
+11. Browser encrypts ballot client-side (custom ElGamal over Ristretto255, built on libsodium.js WASM primitives), generates ZK proofs, generates random ballot_id (256 bits via `crypto.getRandomValues()`, encoded as base64url; Collection Server rejects collisions, though collision probability is negligible at 2^-128)
 12. Submit to Collection Server → stripped → Bulletin Board
 13. Receive Merkle inclusion proof + ballot ID
 14. Extension popup shows return code — voter verifies against session mapping
@@ -213,15 +262,15 @@ Layer 1 computes the "active ballot ID set" — for each ЕГН, the ballot_id o
 
 ### 4.5 Device Reuse Policy
 
-- At submission, browser generates a device attestation hash
-- Layer 1 checks: has this device hash submitted for a different ЕГН in this election?
-- Same person re-voting from same device: allowed (override mechanism)
+- At submission, browser generates a device attestation using a per-election cookie set during the first voting session from that browser profile. This is NOT browser fingerprinting (which is unreliable and privacy-invasive). The cookie is a random 256-bit value generated on first vote and sent with subsequent submissions. It is scoped to the browser profile, not the hardware.
+- Layer 1 checks: has this cookie been associated with a different ЕГН in this election?
+- Same person re-voting from same device: allowed (override mechanism — same ЕГН, same cookie is fine)
 - Configurable: `strict` (reject) / `warn` (proceed with warning) / `disabled`
-- Edge cases: shared family computer (scoped to browser profile), public terminals (exemptible)
+- Edge cases: shared family computer — different browser profiles have different cookies. Incognito/private mode has no cookie — treated as a new device. Public terminals can be exempted by CIK configuration.
 
 ### 4.6 Error Handling
 
-- Network failure during submission → queued in browser storage, retried automatically
+- Network failure during submission → queued in `sessionStorage` (cleared on tab close, NOT `localStorage`). Retry occurs only within the same browser session. If the tab is closed, the voter must re-authenticate and re-vote (safe due to override mechanism). No auth tokens are persisted. No encrypted ballots survive the session.
 - eAuth timeout → re-authenticate, no data lost
 - Proof validation failure → Collection Server returns error, browser re-encrypts with fresh randomness
 - Election closed → hard rejection, directed to nearest polling station
@@ -259,7 +308,17 @@ Layer 1 computes the "active ballot ID set" — for each ЕГН, the ballot_id o
 - Commission checks voter ID manually (existing Bulgarian practice)
 - Commission marks voter in electoral roll (paper or tablet)
 - Machine does NOT authenticate the voter — doesn't know who is using it
-- Layer 1 receives voter identity from commission tablet, paired with machine's ballot_id
+
+**Machine-tablet pairing protocol:**
+1. Before the voter approaches, the commission member taps "Next Voter" on their tablet, entering the voter's ЕГН
+2. Tablet generates a 6-digit session code and displays it to the commission member
+3. Commission member enters the session code on the voting machine's keypad (separate from the voter-facing touchscreen — this is a commission-only input on the side/back of the machine)
+4. Machine displays "Ready" on the voter-facing screen. The session code is stored locally, associated with the next ballot_id generated.
+5. Voter uses the machine normally. On confirmation, the machine generates ballot_id and pairs it with the session code.
+6. Machine transmits `{session_code, ballot_id}` to the commission tablet (via local network or Bluetooth LE)
+7. Commission tablet records `ЕГН → ballot_id` and sends this mapping to Layer 1
+
+This ensures: (a) the machine never knows the ЕГН (only the session code), (b) the pairing is explicit per-voter, (c) no race conditions between adjacent machines.
 
 ### 5.4 Offline Sync
 
@@ -268,6 +327,13 @@ Layer 1 computes the "active ballot ID set" — for each ЕГН, the ballot_id o
 - Machine signs each batch with its station key for Collection Server authenticity verification
 - If network never available: USB drive physically transported
 - Collection Server processes machine ballots identically to online ballots
+
+**USB sync security protocol:**
+- **Station key provisioning:** Each machine receives a unique station key pair during pre-election setup. The private key is stored in the machine's TPM or secure enclave. The public key is registered with the Collection Server, associated with the station ID and constituency.
+- **Batch format:** Each USB batch contains: `{station_id, sequence_number, ballots[], batch_signature}`. The sequence number is monotonically increasing per machine, preventing replay attacks.
+- **USB media:** Pre-provisioned, write-once USB drives distributed by CIK. The machine writes the batch file and a cryptographic seal. Arbitrary USB drives are rejected by the machine.
+- **Collection Server validation:** Verifies station key signature, validates station ID is registered, checks sequence number is strictly greater than the last received for that station, rejects duplicate batches.
+- **Chain of custody:** Two commission members must jointly authorize the USB export (two physical buttons pressed simultaneously). The export is logged with timestamp and sequence number.
 
 ### 5.5 Hardware Requirements Specification (Document)
 
@@ -305,6 +371,8 @@ Published spec covering:
 
 **In all cases:** the last ballot_id associated with the ЕГН becomes the active one.
 
+**Canonical ordering:** "Last" is defined by **receipt time at Layer 1's Collection Server** (wall-clock, NTP-synchronized). This is unambiguous for online votes (received in real-time). For offline machine votes that arrive via USB sync after the election, the machine includes its local timestamp in the batch, but the canonical order is: **in-person always wins over online if the machine's local timestamp is before the sync time.** Specifically: if Layer 1 receives an in-person ballot via USB at 21:00 with a machine timestamp of 14:00, and the voter also voted online at 18:00, the in-person vote (14:00) is earlier but takes precedence because it represents the voter's physical presence — the online vote at 18:00 was the override. The last ballot in temporal order is the active one, using machine local timestamps for in-person votes and Collection Server receipt times for online votes.
+
 ### 6.2 Coercion Resistance
 
 - Vote buyer cannot confirm delivery: re-voting is invisible on the bulletin board
@@ -312,6 +380,8 @@ Published spec covering:
 - Timestamps on bulletin board are for random ballot IDs, not voters
 - Individual votes are never decrypted
 - Vote buying becomes economically irrational at scale
+
+**Receipt threat analysis:** The take-home receipt from the voting machine contains a ballot ID that can be verified on the portal. A coercer could demand the receipt. However: (a) the receipt proves inclusion only, never content — the coercer cannot learn what was voted; (b) a "vote for us or don't vote" coercion strategy is defeated by the fact that the voter can claim they voted in person and then overrode online; (c) the voter can discard the receipt before leaving the polling station (it is optional to take). The receipt is a transparency tool, not a proof of vote content.
 
 ### 6.3 Deduplication Protocol (After Polls Close)
 
@@ -325,6 +395,16 @@ Published spec covering:
 **Proof hides:** which IDs were filtered, how many times anyone voted, voter-ballot links.
 **Proof reveals:** total active ballots (= unique voters), that filtering was honest.
 
+### 6.4 Active Set Trust Assumption
+
+**This is the most critical trust assumption in the system.** The ZK dedup proof verifies that the filtered set matches the committed active set, but it does NOT prove that Layer 1 honestly computed the active set from its voter-ballot mappings. A compromised Layer 1 could publish a fraudulent active set (e.g., excluding ballots).
+
+**Mitigations:**
+1. **Voter count cross-check:** The active set size (total unique voters) must equal the number of voters marked in the electoral rolls. Political party observers independently count voters at polling stations. Any discrepancy between the active set size and the observed voter count is immediately flagged.
+2. **Post-election audit:** Layer 1's `ЕГН → ballot_id` database is sealed and made available to court-appointed auditors under judicial order. The auditors can verify the active set was correctly derived. This happens after results certification, under strict access controls.
+3. **Parallel observation:** Political party representatives can run parallel tracking at Layer 1 — observing (but not accessing) the total ballot count and deduplication decisions in real-time, similar to how party observers currently watch ballot boxes.
+4. **Dual-operator requirement:** The active set computation requires sign-off from two CIK administrators (two-person rule), logged in the audit trail.
+
 ---
 
 ## 7. Decryption Ceremony
@@ -336,7 +416,7 @@ Published spec covering:
 20:01  Layer 1 publishes active set commitment.
 20:02  Live broadcast begins. 9 trustees seated, each with HSM.
 20:05  ZK deduplication proof generation begins (progress visible on screen).
-~20:45 Dedup proof published. Audience can verify.
+~21:05 Dedup proof published (worst case 60 min). Audience can verify.
 20:46  Homomorphic tallying: multiply active encrypted ballots element-wise.
 ~20:55 Tallying complete. Encrypted sums ready.
 20:56  Trustee decryption phase begins.
@@ -422,6 +502,14 @@ GET /api/v1/election                 — election metadata (parties, candidates,
 
 All JSON. All signed by bulletin board service key. Downloadable as single archive.
 
+**API details:**
+- Pagination: cursor-based (opaque cursor token, not offset). Default page size: 100, max: 1000.
+- Rate limiting: public read endpoints rate-limited per IP (100 req/min default, configurable). Delegated verifiers can request higher limits via API key.
+- Response envelope: `{"data": ..., "meta": {"cursor": "...", "total": N}, "signature": "..."}`.
+- Error format: `{"error": {"code": "...", "message": "..."}}` with standard HTTP status codes.
+- Versioning: URL-based (`/api/v1/`). Breaking changes require a new version. Old versions supported for one election cycle after deprecation.
+- Authentication: read endpoints are public (no auth). Write endpoints (used only by internal services) require mTLS.
+
 ### 8.3 CLI Verification Tools
 
 ```
@@ -465,11 +553,55 @@ otvoren-vot verify all        — run everything, output pass/fail report
 
 - Roles: CIK admin (full), CIK observer (read-only), trustee (ceremony only)
 - All actions logged to immutable audit trail (append-only PostgreSQL table)
-- Two-person rule for critical operations: election creation, key generation, emergency controls
+- **Two-person rule** for critical operations: election creation, key generation, emergency controls, active set computation. Mechanism: critical operations enter a "pending approval" state. A second, distinct admin account must approve within a configurable time window (default: 30 minutes). Both the request and approval are recorded in the immutable audit trail with timestamps and admin identities. If the approval window expires, the operation is cancelled and logged.
 
 ---
 
-## 10. Non-Code Deliverables
+## 10. Availability & Load Management
+
+**Expected load:** ~500,000 online voters over 12 hours = ~12 votes/second average, with peak bursts of ~100 votes/second (morning and evening spikes).
+
+**Rate limiting:**
+- Collection Server: rate-limited per authenticated voter (max 10 submissions per hour per ЕГН — generous for override use case, prevents abuse)
+- Bulletin Board public API: per-IP rate limiting (see Section 8.2)
+- Dashboard: served via CDN (Cloudflare or equivalent) to absorb traffic spikes
+
+**DDoS protection:**
+- Voter-facing services (`izbori.bg`, dashboard) behind CDN/DDoS mitigation
+- Collection Server and Bulletin Board are on non-public networks, accessed only via the web app's backend (not directly from browsers)
+- The Bulletin Board's public read API is a separate, read-only replica that can be scaled independently
+- Connection pooling and request queuing at the Collection Server (reject gracefully rather than crash under load)
+
+**Graceful degradation:**
+- If online voting is overwhelmed: queue submissions, show estimated wait time
+- If online voting is fully down: in-person voting continues unaffected at all polling stations
+- The digital system improves the process; paper is always the safety net
+
+---
+
+## 11. Accessibility
+
+**Web interface (WCAG 2.1 AA compliance):**
+- Full keyboard navigation — every interaction reachable without a mouse
+- Screen reader support — all interactive elements have ARIA labels, ballot choices are semantically structured
+- High-contrast mode — toggle in the UI, meets WCAG AAA contrast ratios
+- Large text mode — minimum 18px base, scalable to 200%
+- Focus indicators — visible focus ring on all interactive elements
+- No time-limited interactions — the ballot page does not expire while the voter is selecting
+
+**Voting machine:**
+- Extra-large text mode with high contrast (activated via accessibility button on machine)
+- Audio guidance via headphone jack with physical NEXT/SELECT hardware buttons for blind voters
+- Touchscreen targets minimum 44×44px (WCAG touch target size)
+- Paper receipt includes both printed text and QR code (QR scannable by accessibility apps)
+
+**Browser extension:**
+- Extension popup is screen-reader accessible
+- Return code displayed as both text and a color indicator (not color-only — avoids color-blindness issues)
+
+---
+
+## 12. Non-Code Deliverables
 
 ### 10.1 Threat Model (Bulgarian)
 
@@ -493,7 +625,7 @@ Common Criteria (Protection Profile, target EAL), FIPS 140-3 Level 3 (HSMs), EU 
 
 ---
 
-## 11. Project Structure
+## 13. Project Structure
 
 Vertical monorepo, organized by architectural layer:
 
@@ -524,7 +656,7 @@ Bottom-up: crypto primitives → bulletin board → tally → collection + auth 
 
 ---
 
-## 12. Technology Stack
+## 14. Technology Stack
 
 | Component | Technology | Justification |
 |-----------|-----------|---------------|
@@ -532,17 +664,18 @@ Bottom-up: crypto primitives → bulletin board → tally → collection + auth 
 | ZK proofs | gnark (Go) | Native Go, Groth16 recursion support |
 | Bulletin board storage | PostgreSQL | Battle-tested, familiar to Bulgarian gov IT, standard replication |
 | HSM interface | Go PKCS#11 | Standard HSM protocol |
-| Client-side encryption | libsodium.js (WASM) | Audited crypto in browser, no JS crypto pitfalls |
+| Client-side encryption | Custom ElGamal on libsodium.js scalar/point primitives (WASM) | Ristretto255 group, homomorphic property required |
 | Voter web app | TypeScript/React | Component model, ecosystem, developer availability |
 | Public dashboard | TypeScript/React | Shared codebase with web app |
 | Browser extension | TypeScript | Chrome + Firefox Manifest V3 |
 | Election admin | Python FastAPI | CRUD + workflow, auto-generated API docs |
 | Machine software | Go on embedded Linux | Same crypto library as servers, single binary |
 | Containerization | Docker Compose | Dev/demo deployment |
+| Localization | Hardcoded Bulgarian strings (no i18n framework) | Single language, avoids framework overhead. If multi-language is ever needed, extract to resource files. |
 
 ---
 
-## 13. Decisions Log
+## 15. Decisions Log
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
