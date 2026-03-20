@@ -66,7 +66,7 @@ Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol usi
 
 **Cryptographic group:** Exponential ElGamal over the **Ristretto255** group (prime-order group derived from Curve25519, avoids cofactor issues). Ristretto255 provides a clean prime-order abstraction over the Ed25519 curve.
 
-**Implementation:** ElGamal is NOT a built-in libsodium primitive. We implement exponential ElGamal as custom code atop libsodium's low-level scalar/point arithmetic (`crypto_scalarmult_ed25519`, `crypto_core_ed25519_*` family). On the server side (Go), we use `filippo.io/edwards25519` or equivalent for the same group operations.
+**Implementation:** ElGamal is NOT a built-in libsodium primitive. We implement exponential ElGamal as custom code atop libsodium's low-level scalar/point arithmetic (`crypto_scalarmult_ristretto255`, `crypto_core_ristretto255_*` family). On the server side (Go), we use `filippo.io/edwards25519` or equivalent for the same group operations.
 
 - Each vector element encrypted independently with **exponential ElGamal** over Ristretto255 using the election public key
 - Exponential ElGamal is additively homomorphic: `Enc(a) * Enc(b) = Enc(a + b)`
@@ -148,7 +148,7 @@ Both trees are computed on every append. The public tree is the canonical one fo
 The extension must authenticate to the Verification Service without leaking voter identity to Layer 2. This is resolved via a **blinded session token** issued by Layer 1:
 
 1. After eAuth, Layer 1's Collection Server generates a one-time `session_token` for this voting session
-2. Collection Server blinds the token using a Schnorr blind signature: `blinded_token = Blind(session_token, voter_blinding_factor)`. The blinding ensures the token is unlinkable to the voter's ЕГН.
+2. Collection Server blinds the token using RSA Blind Signatures (RFC 9474, as used in Privacy Pass): `blinded_token = Blind(session_token, voter_blinding_factor)`. The blinding ensures the token is unlinkable to the voter's ЕГН.
 3. Collection Server signs the blinded token and returns it to the browser
 4. Browser unblinds: `signed_token = Unblind(blinded_signed_token, voter_blinding_factor)`
 5. Browser passes `signed_token` to the extension (via `chrome.runtime.sendMessage` from the page to the extension)
@@ -417,9 +417,9 @@ Published spec covering:
 20:02  Live broadcast begins. 9 trustees seated, each with HSM.
 20:05  ZK deduplication proof generation begins (progress visible on screen).
 ~21:05 Dedup proof published (worst case 60 min). Audience can verify.
-20:46  Homomorphic tallying: multiply active encrypted ballots element-wise.
-~20:55 Tallying complete. Encrypted sums ready.
-20:56  Trustee decryption phase begins.
+21:06  Homomorphic tallying: multiply active encrypted ballots element-wise.
+~21:15 Tallying complete. Encrypted sums ready.
+21:16  Trustee decryption phase begins.
 ```
 
 ### 7.2 Trustee Decryption
@@ -603,23 +603,23 @@ otvoren-vot verify all        — run everything, output pass/fail report
 
 ## 12. Non-Code Deliverables
 
-### 10.1 Threat Model (Bulgarian)
+### 12.1 Threat Model (Bulgarian)
 
 Structured analysis: in-scope threats (client malware, server compromise, insider threats, network attacks, vote buying, ballot stuffing, tally manipulation), out-of-scope threats, per-threat analysis (likelihood, impact, mitigation, residual risk).
 
-### 10.2 Legal Compliance Analysis (Bulgarian)
+### 12.2 Legal Compliance Analysis (Bulgarian)
 
 Article-by-article mapping against Изборен кодекс: satisfied articles, articles requiring interpretation, articles requiring amendment. Comparison with Estonian and Swiss legal frameworks. GDPR / ЗЗЛД compliance analysis.
 
-### 10.3 Cost Projection (Bulgarian)
+### 12.3 Cost Projection (Bulgarian)
 
 Hardware (HSMs, ceremony workstation, servers, voting machines), software (open source + maintenance + audits), operations (staffing, coordination). 5-year TCO. Comparison with current election costs.
 
-### 10.4 Independent Audit Plan (Bulgarian)
+### 12.4 Independent Audit Plan (Bulgarian)
 
 Pre-election code audit (2 firms, 3-6 months), penetration testing, formal verification targets, post-election verification, audit cadence.
 
-### 10.5 Certification Path (Bulgarian)
+### 12.5 Certification Path (Bulgarian)
 
 Common Criteria (Protection Profile, target EAL), FIPS 140-3 Level 3 (HSMs), EU eIDAS compliance, BSI Technical Guidelines reference, timeline (12-18 months).
 
