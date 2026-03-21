@@ -112,6 +112,45 @@ func TestHasVoted(t *testing.T) {
 	}
 }
 
+func TestComputeRowHash(t *testing.T) {
+	key := []byte("test-history-key")
+	h1 := ComputeRowHash(key, "", "egn1", "ballot1", 1)
+	h2 := ComputeRowHash(key, "", "egn1", "ballot1", 1)
+	if h1 != h2 {
+		t.Fatal("same input should produce same hash")
+	}
+	if len(h1) != 64 {
+		t.Fatalf("expected 64 hex chars, got %d", len(h1))
+	}
+	// Chain: second row includes first row's hash
+	h3 := ComputeRowHash(key, h1, "egn1", "ballot2", 2)
+	if h3 == h1 {
+		t.Fatal("different inputs should produce different hashes")
+	}
+	// Different key produces different hash
+	h4 := ComputeRowHash([]byte("other-key"), "", "egn1", "ballot1", 1)
+	if h1 == h4 {
+		t.Fatal("different keys should produce different hashes")
+	}
+}
+
+func TestOverrideChainActiveBallotID(t *testing.T) {
+	chain := OverrideChain{
+		EgnHash: "hash1",
+		Submissions: []HistoryEntry{
+			{BallotID: "b1", Seq: 1},
+			{BallotID: "b2", Seq: 2},
+		},
+	}
+	if chain.ActiveBallotID() != "b2" {
+		t.Fatalf("expected b2, got %s", chain.ActiveBallotID())
+	}
+	empty := OverrideChain{}
+	if empty.ActiveBallotID() != "" {
+		t.Fatal("empty chain should return empty string")
+	}
+}
+
 func TestHashEGN(t *testing.T) {
 	key := []byte("test-key")
 	h1 := HashEGN("8501011234", key)

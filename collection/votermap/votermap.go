@@ -5,7 +5,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"sync"
+	"time"
 )
 
 // Store is the interface for voter ballot tracking.
@@ -24,6 +26,53 @@ type Store interface {
 func HashEGN(egn string, key []byte) string {
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(egn))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// Channel represents the submission channel.
+type Channel string
+
+const (
+	ChannelOnline   Channel = "online"
+	ChannelInPerson Channel = "in_person"
+)
+
+// HistoryEntry represents one ballot submission in a voter's override chain.
+type HistoryEntry struct {
+	BallotID    string
+	Channel     Channel
+	SubmittedAt time.Time
+	Seq         int
+	RowHash     string // hex-encoded HMAC-SHA256
+}
+
+// OverrideChain represents the full submission history for one voter.
+type OverrideChain struct {
+	EgnHash     string
+	Submissions []HistoryEntry
+}
+
+// ActiveBallotID returns the ballot ID of the most recent submission.
+func (c OverrideChain) ActiveBallotID() string {
+	if len(c.Submissions) == 0 {
+		return ""
+	}
+	return c.Submissions[len(c.Submissions)-1].BallotID
+}
+
+// AuditStore provides read-only access to vote override history.
+// All methods are scoped to the election_id configured at construction time.
+type AuditStore interface {
+	GetOverrideHistory(ctx context.Context, egnHash string) ([]HistoryEntry, error)
+	GetAllOverrideChains(ctx context.Context, fn func(OverrideChain) error) error
+}
+
+// ComputeRowHash produces the tamper-detection hash for a history row.
+// Uses null-byte delimiters to prevent field concatenation ambiguity.
+func ComputeRowHash(key []byte, prevHash, egnHash, ballotID string, seq int) string {
+	data := fmt.Appendf(nil, "%s\x00%s\x00%s\x00%d", prevHash, egnHash, ballotID, seq)
+	mac := hmac.New(sha256.New, key)
+	mac.Write(data)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
