@@ -3,6 +3,7 @@ package internal
 import (
 	"crypto/rand"
 	"crypto/sha512"
+	"encoding/binary"
 
 	"filippo.io/edwards25519"
 )
@@ -38,8 +39,13 @@ func HashToScalar(domain, data []byte) *edwards25519.Scalar {
 // Domain separator prevents cross-protocol attacks.
 func FiatShamir(domain string, data ...[]byte) *edwards25519.Scalar {
 	h := sha512.New()
-	h.Write([]byte(domain))
+	// Write domain with length prefix
+	domainBytes := []byte(domain)
+	binary.Write(h, binary.BigEndian, uint32(len(domainBytes)))
+	h.Write(domainBytes)
+	// Write each data element with length prefix
 	for _, d := range data {
+		binary.Write(h, binary.BigEndian, uint32(len(d)))
 		h.Write(d)
 	}
 	var digest [64]byte
