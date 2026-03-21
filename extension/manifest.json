@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Отворен вот — Верификация",
+  "version": "1.0.0",
+  "description": "Верификация на гласуването чрез кодове за проверка",
+  "permissions": ["storage"],
+  "host_permissions": ["*://izbori.bg/*", "*://localhost/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://izbori.bg/*", "*://localhost:5173/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Отворен вот"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
