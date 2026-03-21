@@ -98,6 +98,8 @@ docker compose up
 
 ## Key Files
 
-- Design spec: `docs/superpowers/specs/2026-03-20-otvoren-vot-design.md`
+- Design spec: `.superpowers/specs/2026-03-20-otvoren-vot-design.md` (not in git)
+- Implementation plans: `.superpowers/plans/` (not in git)
 - Architecture docs: `docs/architecture/`
 - Protocol specs: `docs/protocol/`
+- CIK deliverables: `docs/cik/` (Bulgarian)

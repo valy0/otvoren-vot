@@ -42,8 +42,6 @@ Formal documents for presentation to the Central Election Commission.
 | [Път за сертификация](cik/certification-path.md) | Common Criteria, FIPS 140-3, eIDAS, BSI, 18-месечна времева линия |
 | [PKI CP/CPS](cik/pki-cp-cps.md) | Политика за сертификати и практика на удостоверителния орган |
 
-## Design Specification
+## Internal Documents
 
-| Document | Description |
-|----------|-------------|
-| [System Design Spec](superpowers/specs/2026-03-20-otvoren-vot-design.md) | Complete approved design specification — the source of truth |
+Design specifications and implementation plans are in `.superpowers/` (not tracked in git). See `CLAUDE.md` for paths.
