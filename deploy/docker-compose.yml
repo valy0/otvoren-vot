@@ -15,5 +15,19 @@ services:
       timeout: 5s
       retries: 5
 
+  bulletin-board:
+    build:
+      context: ..
+      dockerfile: bulletin-board/Dockerfile
+    environment:
+      DATABASE_URL: postgres://board:dev@postgres:5432/bulletin_board?sslmode=disable
+      LISTEN_ADDR: ":8080"
+      INTERNAL_API_KEY: dev-key
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
