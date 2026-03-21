@@ -1,41 +1,61 @@
 package votermap
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
+
+var ctx = context.Background()
 
 func TestRecordAndRetrieve(t *testing.T) {
-	vm := New()
-	prev := vm.Record("8501011234", "ballot-1", "online", 1000)
+	vm := NewMemoryStore()
+	prev, err := vm.Record(ctx, "8501011234", "ballot-1", "online", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if prev != "" {
 		t.Fatal("first vote should have no previous")
 	}
-	id, ok := vm.GetActiveBallotID("8501011234")
+	id, ok, err := vm.GetActiveBallotID(ctx, "8501011234")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok || id != "ballot-1" {
 		t.Fatalf("expected ballot-1, got %s", id)
 	}
 }
 
 func TestOverride(t *testing.T) {
-	vm := New()
-	vm.Record("8501011234", "ballot-1", "online", 1000)
-	prev := vm.Record("8501011234", "ballot-2", "in-person", 2000)
+	vm := NewMemoryStore()
+	vm.Record(ctx, "8501011234", "ballot-1", "online", 1000)
+	prev, err := vm.Record(ctx, "8501011234", "ballot-2", "in-person", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if prev != "ballot-1" {
 		t.Fatalf("expected previous ballot-1, got %s", prev)
 	}
-	id, _ := vm.GetActiveBallotID("8501011234")
+	id, _, err := vm.GetActiveBallotID(ctx, "8501011234")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if id != "ballot-2" {
 		t.Fatalf("expected ballot-2 after override, got %s", id)
 	}
 }
 
 func TestActiveSet(t *testing.T) {
-	vm := New()
-	vm.Record("1111111111", "b1", "online", 1000)
-	vm.Record("2222222222", "b2", "online", 1000)
-	vm.Record("3333333333", "b3", "in-person", 1000)
+	vm := NewMemoryStore()
+	vm.Record(ctx, "1111111111", "b1", "online", 1000)
+	vm.Record(ctx, "2222222222", "b2", "online", 1000)
+	vm.Record(ctx, "3333333333", "b3", "in-person", 1000)
 	// Override voter 1
-	vm.Record("1111111111", "b4", "in-person", 2000)
+	vm.Record(ctx, "1111111111", "b4", "in-person", 2000)
 
-	set := vm.ActiveSet()
+	set, err := vm.ActiveSet(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(set) != 3 {
 		t.Fatalf("expected 3 active ballots, got %d", len(set))
 	}
@@ -48,25 +68,56 @@ func TestActiveSet(t *testing.T) {
 }
 
 func TestSize(t *testing.T) {
-	vm := New()
-	if vm.Size() != 0 {
+	vm := NewMemoryStore()
+	size, err := vm.Size(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 0 {
 		t.Fatal("empty map should have size 0")
 	}
-	vm.Record("1111111111", "b1", "online", 1000)
-	vm.Record("2222222222", "b2", "online", 1000)
-	vm.Record("1111111111", "b3", "online", 2000) // override, not new voter
-	if vm.Size() != 2 {
-		t.Fatalf("expected 2 unique voters, got %d", vm.Size())
+	vm.Record(ctx, "1111111111", "b1", "online", 1000)
+	vm.Record(ctx, "2222222222", "b2", "online", 1000)
+	vm.Record(ctx, "1111111111", "b3", "online", 2000) // override, not new voter
+	size, err = vm.Size(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 2 {
+		t.Fatalf("expected 2 unique voters, got %d", size)
 	}
 }
 
 func TestHasVoted(t *testing.T) {
-	vm := New()
-	if vm.HasVoted("8501011234") {
+	vm := NewMemoryStore()
+	voted, err := vm.HasVoted(ctx, "8501011234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if voted {
 		t.Fatal("should not have voted yet")
 	}
-	vm.Record("8501011234", "b1", "online", 1000)
-	if !vm.HasVoted("8501011234") {
+	vm.Record(ctx, "8501011234", "b1", "online", 1000)
+	voted, err = vm.HasVoted(ctx, "8501011234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !voted {
 		t.Fatal("should have voted")
+	}
+}
+
+func TestHashEGN(t *testing.T) {
+	h1 := HashEGN("8501011234")
+	h2 := HashEGN("8501011234")
+	if h1 != h2 {
+		t.Fatal("same input should produce same hash")
+	}
+	if len(h1) != 64 {
+		t.Fatalf("expected 64 hex chars, got %d", len(h1))
+	}
+	h3 := HashEGN("9912319999")
+	if h1 == h3 {
+		t.Fatal("different inputs should produce different hashes")
 	}
 }

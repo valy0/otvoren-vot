@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,7 @@ func TestSubmitBallot(t *testing.T) {
 	}))
 	defer bb.Close()
 
-	vm := votermap.New()
+	vm := votermap.NewMemoryStore()
 	h := NewCollectionHandler(vm, bb.URL, "test-key", "active-key")
 
 	body := `{"ballot_id":"b1","encrypted_ballot":{},"zk_proofs":{}}`
@@ -40,7 +41,8 @@ func TestSubmitBallot(t *testing.T) {
 	}
 
 	// Verify voter map was updated
-	if !vm.HasVoted("8501011234") {
+	voted, _ := vm.HasVoted(context.Background(), votermap.HashEGN("8501011234"))
+	if !voted {
 		t.Fatal("voter should be recorded")
 	}
 }
@@ -54,7 +56,7 @@ func TestSubmitOverride(t *testing.T) {
 	}))
 	defer bb.Close()
 
-	vm := votermap.New()
+	vm := votermap.NewMemoryStore()
 	h := NewCollectionHandler(vm, bb.URL, "test-key", "active-key")
 
 	// First vote
@@ -75,14 +77,14 @@ func TestSubmitOverride(t *testing.T) {
 		t.Fatal("second vote should be an override")
 	}
 
-	id, _ := vm.GetActiveBallotID("8501011234")
+	id, _, _ := vm.GetActiveBallotID(context.Background(), votermap.HashEGN("8501011234"))
 	if id != "b2" {
 		t.Fatalf("active ballot should be b2, got %s", id)
 	}
 }
 
 func TestSubmitMissingIdentity(t *testing.T) {
-	vm := votermap.New()
+	vm := votermap.NewMemoryStore()
 	h := NewCollectionHandler(vm, "http://unused", "key", "active-key")
 
 	req := httptest.NewRequest("POST", "/submit", bytes.NewBufferString(`{"ballot_id":"b1","encrypted_ballot":{},"zk_proofs":{}}`))
@@ -96,7 +98,7 @@ func TestSubmitMissingIdentity(t *testing.T) {
 }
 
 func TestSubmitInvalidEGN(t *testing.T) {
-	vm := votermap.New()
+	vm := votermap.NewMemoryStore()
 	h := NewCollectionHandler(vm, "http://unused", "key", "active-key")
 
 	cases := []struct {
@@ -121,8 +123,8 @@ func TestSubmitInvalidEGN(t *testing.T) {
 }
 
 func TestRequireKey(t *testing.T) {
-	vm := votermap.New()
-	vm.Record("1111111111", "b1", "online", 1000)
+	vm := votermap.NewMemoryStore()
+	vm.Record(context.Background(), votermap.HashEGN("1111111111"), "b1", "online", 1000)
 
 	h := NewCollectionHandler(vm, "http://unused", "key", "secret-active-key")
 	protected := requireKey("secret-active-key", h.HandleActiveSet)
@@ -155,9 +157,9 @@ func TestRequireKey(t *testing.T) {
 }
 
 func TestActiveSet(t *testing.T) {
-	vm := votermap.New()
-	vm.Record("1111111111", "b1", "online", 1000)
-	vm.Record("2222222222", "b2", "online", 1000)
+	vm := votermap.NewMemoryStore()
+	vm.Record(context.Background(), votermap.HashEGN("1111111111"), "b1", "online", 1000)
+	vm.Record(context.Background(), votermap.HashEGN("2222222222"), "b2", "online", 1000)
 
 	h := NewCollectionHandler(vm, "http://unused", "key", "active-key")
 	req := httptest.NewRequest("GET", "/active-set", nil)

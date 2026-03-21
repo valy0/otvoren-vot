@@ -1,3 +1,5 @@
+name: otvoren-vot
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,6 +13,22 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U board -d bulletin_board"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-collection:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: collection
+      POSTGRES_USER: collection
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-collection:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collection -d collection"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -49,11 +67,17 @@ services:
       AUTH_SERVICE_URL: http://auth:8082
       BULLETIN_BOARD_API_KEY: ${BULLETIN_BOARD_API_KEY:-dev-key-change-in-production}
       ACTIVE_SET_API_KEY: ${ACTIVE_SET_API_KEY:-dev-active-key-change-in-production}
+      DATABASE_URL: postgres://collection:dev@postgres-collection:5432/collection?sslmode=disable
+      ELECTION_ID: ${ELECTION_ID:-00000000-0000-0000-0000-000000000000}
     ports:
       - "8083:8083"
     depends_on:
-      - bulletin-board
-      - auth
+      postgres-collection:
+        condition: service_healthy
+      bulletin-board:
+        condition: service_started
+      auth:
+        condition: service_started
 
   tally:
     build:
@@ -88,3 +112,4 @@ services:
 
 volumes:
   pgdata:
+  pgdata-collection:

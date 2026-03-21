@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/valy0/otvoren-vot/collection/store"
 	"github.com/valy0/otvoren-vot/collection/votermap"
 )
 
@@ -25,15 +27,40 @@ func main() {
 		log.Fatal("ACTIVE_SET_API_KEY environment variable must be set")
 	}
 
-	vm := votermap.New()
-	handler := NewCollectionHandler(vm, cfg.BulletinBoardURL, apiKey, activeSetKey)
+	ctx := context.Background()
+
+	var voterStore votermap.Store
+	if cfg.DatabaseURL != "" {
+		pgStore, err := store.New(ctx, cfg.DatabaseURL, cfg.ElectionID)
+		if err != nil {
+			log.Fatalf("Failed to connect to database: %v", err)
+		}
+		if err := pgStore.RunMigrations(ctx); err != nil {
+			log.Fatalf("Failed to run migrations: %v", err)
+		}
+		defer pgStore.Close()
+		voterStore = pgStore
+		log.Printf("Using PostgreSQL store (election %s)", cfg.ElectionID)
+	} else {
+		log.Println("WARNING: No DATABASE_URL set, using in-memory store (data will not persist across restarts)")
+		voterStore = votermap.NewMemoryStore()
+	}
+
+	handler := NewCollectionHandler(voterStore, cfg.BulletinBoardURL, apiKey, activeSetKey)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/submit", handler.HandleSubmit)
 	mux.HandleFunc("GET /internal/v1/active-set", requireKey(activeSetKey, handler.HandleActiveSet))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		size, err := voterStore.Size(r.Context())
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"status":"error"}`))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok","voters":` + fmt.Sprintf("%d", vm.Size()) + `}`))
+		w.Write([]byte(fmt.Sprintf(`{"status":"ok","voters":%d}`, size)))
 	})
 
 	srv := &http.Server{

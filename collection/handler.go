@@ -13,15 +13,15 @@ import (
 )
 
 type CollectionHandler struct {
-	voterMap         *votermap.VoterMap
+	voterStore       votermap.Store
 	bulletinBoardURL string
 	internalAPIKey   string
 	activeSetAPIKey  string
 }
 
-func NewCollectionHandler(vm *votermap.VoterMap, bbURL, apiKey, activeSetKey string) *CollectionHandler {
+func NewCollectionHandler(store votermap.Store, bbURL, apiKey, activeSetKey string) *CollectionHandler {
 	return &CollectionHandler{
-		voterMap:         vm,
+		voterStore:       store,
 		bulletinBoardURL: bbURL,
 		internalAPIKey:   apiKey,
 		activeSetAPIKey:  activeSetKey,
@@ -60,6 +60,8 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	egnHash := votermap.HashEGN(egn)
+
 	var req submitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON")
@@ -71,7 +73,11 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Record in voter map (handles override)
-	prevBallotID := h.voterMap.Record(egn, req.BallotID, "online", time.Now().Unix())
+	prevBallotID, err := h.voterStore.Record(r.Context(), egnHash, req.BallotID, "online", time.Now().Unix())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "store_error", fmt.Sprintf("Failed to record vote: %v", err))
+		return
+	}
 
 	// Forward to bulletin board (identity stripped — no EGN sent)
 	bbReq := map[string]interface{}{
@@ -143,7 +149,11 @@ func (h *CollectionHandler) forwardToBulletinBoard(body []byte) (*struct {
 
 // HandleActiveSet returns the current active set for deduplication (used after polls close).
 func (h *CollectionHandler) HandleActiveSet(w http.ResponseWriter, r *http.Request) {
-	set := h.voterMap.ActiveSet()
+	set, err := h.voterStore.ActiveSet(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "store_error", fmt.Sprintf("Failed to retrieve active set: %v", err))
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"active_set": set,
