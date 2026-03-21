@@ -118,10 +118,18 @@ services:
     environment:
       LISTEN_ADDR: ":8081"
       BULLETIN_BOARD_URL: http://bulletin-board:8080
+      CEREMONY_API_KEY: ${CEREMONY_API_KEY:-dev-ceremony-key-change-in-production}
+      TRUSTEE_VERIFICATION_KEYS: /keys/trustee-keys.json
+      CEREMONY_STATE_DIR: /var/lib/ceremony
+      ELECTION_ID: ${ELECTION_ID:-00000000-0000-0000-0000-000000000000}
     ports:
       - "8081:8081"
+    volumes:
+      - ./keys:/keys:ro
+      - ceremony-state:/var/lib/ceremony
     depends_on:
-      - bulletin-board
+      bulletin-board:
+        condition: service_started
 
   verification:
     build:
@@ -146,3 +154,4 @@ volumes:
   pgdata:
   pgdata-collection:
   redis-data:
+  ceremony-state:
