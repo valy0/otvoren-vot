@@ -64,3 +64,13 @@ p { color: var(--text-dim); margin-bottom: 1rem; line-height: 1.6; }
 
 .note { font-size: 0.875rem; }
 .actions { display: flex; gap: 0.5rem; }
+
+:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}

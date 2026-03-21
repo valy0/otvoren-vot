@@ -55,8 +55,15 @@ export default function App() {
 
       <div className="verify-section">
         <h2>Проверка на бюлетина</h2>
-        <p>Въведете идентификатор на бюлетина, за да проверите включването:</p>
-        <input type="text" placeholder="Идентификатор на бюлетина..." className="verify-input" />
+        <label htmlFor="ballot-id-input">
+          Въведете идентификатор на бюлетината, за да проверите включването:
+        </label>
+        <input
+          id="ballot-id-input"
+          type="text"
+          placeholder="Идентификатор на бюлетина..."
+          className="verify-input"
+        />
         <button className="btn-primary">Провери</button>
       </div>
     </div>

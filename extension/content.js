@@ -23,7 +23,7 @@ window.addEventListener('message', (event) => {
         window.postMessage({
           type: 'OTVOREN_VOT_VERIFICATION_RESULT',
           ...response
-        }, '*')
+        }, window.location.origin)
       }
     )
   }

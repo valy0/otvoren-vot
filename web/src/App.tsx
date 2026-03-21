@@ -34,10 +34,12 @@ export default function App() {
     return (
       <div className="container">
         <h1>Изберете партия</h1>
-        <div className="party-grid">
+        <div className="party-grid" role="radiogroup" aria-label="Избор на партия">
           {PARTIES.map((party, i) => (
             <button
               key={i}
+              role="radio"
+              aria-checked={choice?.partyIndex === i}
               className={`party-btn ${choice?.partyIndex === i ? 'selected' : ''}`}
               onClick={() => setChoice({ partyIndex: i, partyName: party })}
             >

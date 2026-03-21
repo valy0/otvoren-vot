@@ -1,7 +1,10 @@
 // Background service worker for Отворен вот verification extension
 // Communicates with the Verification Service (Layer 2) independently from page JS
 
+// In production, this MUST be https://verify.izbori.bg
+// Using localhost for development only
 const VERIFICATION_URL = 'http://localhost:8084'
+// TODO: Load from extension storage or manifest for production deployment
 
 let currentSession = null
 
@@ -33,6 +36,9 @@ async function startSession() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     })
+    if (!res.ok) {
+      return { success: false, error: `Server returned ${res.status}` }
+    }
     const data = await res.json()
     currentSession = {
       id: data.session_id,
@@ -60,6 +66,9 @@ async function verifyBallot(encryptedBallot) {
         encrypted_ballot: encryptedBallot
       })
     })
+    if (!res.ok) {
+      return { success: false, error: `Server returned ${res.status}` }
+    }
     const data = await res.json()
     currentSession.returnCode = data.return_code
     currentSession.verified = true
