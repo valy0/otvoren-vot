@@ -34,50 +34,44 @@ The system defends against client-side malware through a mandatory browser exten
 
 ## Architecture
 
-```mermaid
-graph TB
-    subgraph "Voter Interfaces"
-        WEB[Web App<br/>TypeScript/React]
-        MACHINE[Voting Machine<br/>Go / Embedded Linux]
-    end
+The system uses a strict two-layer architecture that enforces separation between identity and ballot data at the network level. No single component can both identify a voter and learn how they voted.
 
-    subgraph "Layer 1 — Identity<br/>Knows WHO voted, not WHAT"
-        AUTH[Auth Service<br/>eAuth 2.0]
-        COLLECTION[Collection Server<br/>strips voter identity]
-    end
+[![Two-Layer System Architecture](docs/images/architecture.png)](docs/diagrams/otvoren-vot-architecture.html)
 
-    subgraph "Layer 2 — Ballot<br/>Knows WHAT was cast, not WHO"
-        BB[Bulletin Board<br/>append-only Merkle tree]
-        TALLY[Tally Service<br/>homomorphic + threshold decryption]
-        VERIFICATION[Verification Service<br/>return code generation]
-    end
+**Layer 1 — Identity** (Auth Service + Collection Server) knows the voter's identity (ЕГН) and which ballot ID belongs to them, but never sees ballot content — ballots are encrypted before submission and the identity is stripped before forwarding. **Layer 2 — Ballots** (Bulletin Board, Tally Service, Verification Service) sees all encrypted ballots and ZK proofs but receives only random ballot IDs — it cannot link any ballot to a voter.
 
-    subgraph "Public Services"
-        DASHBOARD[Public Dashboard]
-        VERIFY[Verify Portal<br/>verify.izbori.bg]
-        API[Open Data API]
-    end
+### System Flows
 
-    EXTENSION[Browser Extension<br/>TypeScript]
+<table>
+<tr>
+<td width="50%">
 
-    WEB -->|authenticates| AUTH
-    AUTH -->|session token| COLLECTION
-    WEB -->|encrypted ballot + ZK proofs| COLLECTION
-    MACHINE -->|encrypted ballot + ZK proofs| COLLECTION
+**Online Voting Flow**
 
-    COLLECTION -->|ballot_id + encrypted ballot<br/>no voter identity| BB
-    COLLECTION -->|active ballot ID set<br/>after polls close| TALLY
+[![Online Voting Flow](docs/images/voting-flow.png)](docs/diagrams/otvoren-vot-voting-flow.html)
 
-    BB --> TALLY
-    BB --> API
-    TALLY --> BB
-    VERIFICATION -->|return codes| EXTENSION
+From eAuth 2.0 authentication through client-side encryption, identity stripping, Merkle tree inclusion, to browser extension return code verification.
 
-    BB --> DASHBOARD
-    BB --> VERIFY
-```
+</td>
+<td width="50%">
 
-**Why two layers?** Layer 1 (Auth Service + Collection Server) knows the voter's identity (ЕГН) and which ballot ID belongs to them, but never sees ballot content — ballots are encrypted before submission and the identity is stripped before forwarding. Layer 2 (Bulletin Board, Tally Service, Verification Service) sees all encrypted ballots and ZK proofs but receives only random ballot IDs — it cannot link any ballot to a voter. This separation means no single component can both identify a voter and learn how they voted.
+**Decryption Ceremony**
+
+[![Decryption Ceremony](docs/images/ceremony.png)](docs/diagrams/otvoren-vot-ceremony.html)
+
+Nationally televised ceremony: 9 trustees with HSMs, ZK dedup proof, homomorphic tallying, threshold decryption, and live results.
+
+</td>
+</tr>
+</table>
+
+**Verification & Trust Chain**
+
+[![Verification & Trust Chain](docs/images/verification.png)](docs/diagrams/otvoren-vot-verification.html)
+
+Three levels of verification (immediate return codes, individual inclusion check, full independent audit) backed by four cryptographic proofs (ballot validity, deduplication SNARK, partial decryption, tally correctness).
+
+> **Interactive versions:** The images above link to self-contained HTML pages with full detail. Clone the repo and open them in a browser, or browse them in [`docs/diagrams/`](docs/diagrams/).
 
 ---
 

@@ -91,6 +91,8 @@ desktop.ini
 # =============================================================================
 .superpowers/
 .worktrees/
+CLAUDE.md
+**/CLAUDE.md
 .env
 .env.*
 *.local

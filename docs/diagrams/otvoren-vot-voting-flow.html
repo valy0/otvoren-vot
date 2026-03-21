@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otvoren-Vot — Online Voting Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-body: 'Sora', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    --bg: #080c14; --surface: #0f1520; --surface2: #161e2e;
+    --border: rgba(255,255,255,0.07); --border-bright: rgba(255,255,255,0.14);
+    --text: #eaf0f8; --text-dim: #9ca3bf;
+    --l1: #f59e0b; --l1-dim: rgba(245,158,11,0.09);
+    --l2: #3b82f6; --l2-dim: rgba(59,130,246,0.09);
+    --voter: #a78bfa; --voter-dim: rgba(167,139,250,0.09);
+    --green: #00c98d; --green-dim: rgba(0,201,141,0.09);
+    --red: #ef4444; --red-dim: rgba(239,68,68,0.09);
+    --ext: #f472b6; --ext-dim: rgba(244,114,182,0.09);
+    --verify: #22d3ee; --verify-dim: rgba(34,211,238,0.09);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fc; --surface: #ffffff; --surface2: #f0f2f7;
+      --border: rgba(0,0,0,0.08); --border-bright: rgba(0,0,0,0.16);
+      --text: #1e293b; --text-dim: #475569;
+      --l1: #b45309; --l1-dim: rgba(180,83,9,0.07);
+      --l2: #1d4ed8; --l2-dim: rgba(29,78,216,0.07);
+      --voter: #6d28d9; --voter-dim: rgba(109,40,217,0.07);
+      --green: #059669; --green-dim: rgba(5,150,105,0.07);
+      --red: #dc2626; --red-dim: rgba(220,38,38,0.07);
+      --ext: #db2777; --ext-dim: rgba(219,39,119,0.07);
+      --verify: #0891b2; --verify-dim: rgba(8,145,178,0.07);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 15% 20%, var(--voter-dim) 0%, transparent 40%),
+      radial-gradient(ellipse at 85% 80%, var(--l2-dim) 0%, transparent 40%);
+    color: var(--text); font-family: var(--font-body);
+    padding: 48px 40px 60px; min-height: 100vh;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  .anim { animation: fadeUp 0.45s ease-out both; animation-delay: calc(var(--i,0) * 0.06s); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; } }
+
+  .container { max-width: 960px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 40px; }
+  .header .flag { display: inline-flex; border-radius: 4px; overflow: hidden; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+  .header .flag span { width: 28px; height: 6px; }
+  .f-w { background: #fff; } .f-g { background: #00966E; } .f-r { background: #D62612; }
+  .subtitle { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 38px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 10px; }
+  .tagline { font-size: 14px; color: var(--text-dim); line-height: 1.7; max-width: 640px; margin: 0 auto; }
+
+  /* Flow steps */
+  .step {
+    display: grid; grid-template-columns: 60px 1fr; gap: 0 16px; position: relative;
+  }
+  .step-marker { display: flex; flex-direction: column; align-items: center; }
+  .step-num {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    z-index: 2; border: 2px solid var(--border-bright); background: var(--surface);
+  }
+  .step-line { width: 2px; flex: 1; min-height: 20px; background: linear-gradient(to bottom, var(--border-bright), var(--border)); }
+
+  .step--voter .step-num { border-color: var(--voter); color: var(--voter); background: var(--voter-dim); }
+  .step--l1 .step-num { border-color: var(--l1); color: var(--l1); background: var(--l1-dim); }
+  .step--l2 .step-num { border-color: var(--l2); color: var(--l2); background: var(--l2-dim); }
+  .step--ext .step-num { border-color: var(--ext); color: var(--ext); background: var(--ext-dim); }
+  .step--verify .step-num { border-color: var(--verify); color: var(--verify); background: var(--verify-dim); }
+  .step--green .step-num { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+
+  .step-content {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 22px; margin-bottom: 12px;
+    transition: border-color 0.2s;
+  }
+  .step-content:hover { border-color: var(--border-bright); }
+
+  .step-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .step-title { font-size: 15px; font-weight: 600; }
+  .step-actor {
+    font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .actor--voter { background: var(--voter-dim); color: var(--voter); }
+  .actor--l1 { background: var(--l1-dim); color: var(--l1); }
+  .actor--l2 { background: var(--l2-dim); color: var(--l2); }
+  .actor--ext { background: var(--ext-dim); color: var(--ext); }
+  .actor--verify { background: var(--verify-dim); color: var(--verify); }
+
+  .step-desc { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
+  .step-desc code {
+    font-family: var(--font-mono); font-size: 11px;
+    background: var(--surface2); color: var(--text); padding: 1px 6px; border-radius: 3px;
+  }
+  .step-data {
+    margin-top: 10px; padding: 12px 14px;
+    background: var(--surface2); border-radius: 8px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.8; color: var(--text-dim);
+  }
+  .step-data .arrow { color: var(--green); }
+  .step-data .key { color: var(--l1); }
+  .step-data .val { color: var(--l2); }
+  .step-data .stripped { color: var(--red); text-decoration: line-through; opacity: 0.7; }
+
+  /* Phase dividers */
+  .phase { padding: 14px 20px; text-align: center; position: relative; margin: 8px 0; }
+  .phase::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
+  .phase-label {
+    position: relative; z-index: 1; display: inline-block; padding: 4px 14px;
+    background: var(--bg); font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px;
+    border: 1px solid var(--border); border-radius: 4px;
+  }
+
+  /* Result cards */
+  .result { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+  .result-card { padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+  .result-card--match { background: var(--green-dim); border-color: rgba(0,201,141,0.2); }
+  .result-card--mismatch { background: var(--red-dim); border-color: rgba(239,68,68,0.2); }
+  .result-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .result-card--match h4 { color: var(--green); }
+  .result-card--mismatch h4 { color: var(--red); }
+  .result-card p { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    body { padding: 20px; } h1 { font-size: 26px; }
+    .step { grid-template-columns: 44px 1fr; }
+    .step-num { width: 30px; height: 30px; font-size: 10px; }
+    .result { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header anim" style="--i:0">
+    <div class="flag"><span class="f-w"></span><span class="f-g"></span><span class="f-r"></span></div>
+    <p class="subtitle">Otvoren-Vot &middot; End-to-End Verifiable E-Voting</p>
+    <h1>Online Voting Flow</h1>
+    <p class="tagline">From voter authentication through eAuth 2.0 to encrypted ballot submission, identity stripping, Merkle tree inclusion, and browser extension verification — a complete end-to-end journey.</p>
+  </div>
+
+  <div class="flow">
+
+    <div class="phase anim" style="--i:1"><span class="phase-label">Phase 1 — Authentication</span></div>
+
+    <div class="step step--voter anim" style="--i:2">
+      <div class="step-marker"><div class="step-num">1</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Voter opens izbori.bg/vote</div>
+          <span class="step-actor actor--voter">Browser</span>
+        </div>
+        <div class="step-desc">Browser redirects to Auth Service → SAML 2.0 / OIDC redirect to Bulgarian eAuth 2.0 identity provider. Voter authenticates with national credentials + MFA.</div>
+      </div>
+    </div>
+
+    <div class="step step--l1 anim" style="--i:3">
+      <div class="step-marker"><div class="step-num">2</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">eAuth assertion → Session token</div>
+          <span class="step-actor actor--l1">Auth Service</span>
+        </div>
+        <div class="step-desc">Auth Service validates the assertion, extracts ЕГН, checks electoral roll eligibility, and issues a signed JWT (30 min TTL) via HttpOnly cookie.</div>
+        <div class="step-data">
+          <span class="key">session_token</span> = { <span class="val">egn_hash</span>: SHA-256(ЕГН), <span class="val">election_id</span>, <span class="val">session_nonce</span>: random(256-bit) }
+        </div>
+      </div>
+    </div>
+
+    <div class="phase anim" style="--i:4"><span class="phase-label">Phase 2 — Extension Binding (Malware Defense)</span></div>
+
+    <div class="step step--ext anim" style="--i:5">
+      <div class="step-marker"><div class="step-num">3</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Blinded session token handoff</div>
+          <span class="step-actor actor--ext">Extension</span>
+        </div>
+        <div class="step-desc">Page JS blinds the session token via RSA Blind Signatures (RFC 9474), gets it signed by Collection Server, unblinds, and passes <code>{signed_token}</code> to the extension. The extension authenticates to the Verification Service — which validates the signature but <strong>cannot link the token to any voter</strong>.</div>
+      </div>
+    </div>
+
+    <div class="step step--verify anim" style="--i:6">
+      <div class="step-marker"><div class="step-num">4</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Code mapping delivered to extension</div>
+          <span class="step-actor actor--verify">Verification Svc</span>
+        </div>
+        <div class="step-desc">3-of-5 verification trustees each compute partial codes using their key shares. Combined into a per-session mapping: <code>{party → 6-digit code}</code>. Delivered to extension's background worker — invisible to page JS.</div>
+        <div class="step-data">
+          { "Party A": "<span class="val">482917</span>", "Party B": "<span class="val">103856</span>", "Party C": "<span class="val">739201</span>", ... }
+        </div>
+      </div>
+    </div>
+
+    <div class="phase anim" style="--i:7"><span class="phase-label">Phase 3 — Client-Side Encryption</span></div>
+
+    <div class="step step--voter anim" style="--i:8">
+      <div class="step-marker"><div class="step-num">5</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Voter selects party + candidate</div>
+          <span class="step-actor actor--voter">Browser</span>
+        </div>
+        <div class="step-desc">The browser performs all cryptographic operations client-side:</div>
+        <div class="step-data">
+          1. Generate <span class="val">ballot_id</span> = <span class="key">crypto.getRandomValues()</span> → 256-bit random<br>
+          2. Encrypt using <span class="key">ElGamal / Ristretto255</span> via libsodium.js WASM<br>
+          &nbsp;&nbsp;&nbsp;→ Party vector: one <span class="val">Enc(1)</span> for selected, <span class="val">Enc(0)</span> for rest<br>
+          3. Generate <span class="key">ZK validity proofs</span> (Sigma protocol):<br>
+          &nbsp;&nbsp;&nbsp;→ Each element is Enc(0) or Enc(1), party vector sums to exactly 1<br>
+          4. Deterministic nonces from HKDF(signed_token) for verification codes
+        </div>
+      </div>
+    </div>
+
+    <div class="phase anim" style="--i:9"><span class="phase-label">Phase 4 — Submission + Identity Stripping</span></div>
+
+    <div class="step step--l1 anim" style="--i:10">
+      <div class="step-marker"><div class="step-num">6</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Submit to Collection Server</div>
+          <span class="step-actor actor--l1">Collection Svc</span>
+        </div>
+        <div class="step-desc">Browser sends <code>{ballot_id, encrypted_ballot, zk_proofs}</code> with session token. Collection Server validates session, checks eligibility, enforces rate limits (10/hr per voter), records identity-to-ballot mapping.</div>
+        <div class="step-data">
+          <span class="arrow">→</span> Record: <span class="key">egn_hash</span> → <span class="val">ballot_id</span> (private Layer 1 DB, sealed at poll close)<br>
+          <span class="arrow">→</span> Re-vote: upsert — previous ballot_id moved to history table
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--l1 anim" style="--i:11">
+      <div class="step-marker"><div class="step-num">7</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Strip identity → Forward to Layer 2</div>
+          <span class="step-actor actor--l1">Collection Svc</span>
+        </div>
+        <div class="step-desc">Collection Server builds a new forwarding payload with all identity removed:</div>
+        <div class="step-data">
+          <span class="stripped">ЕГН / egn_hash</span> — never sent to Layer 2<br>
+          <span class="stripped">Session token / nonce</span> — never forwarded<br>
+          <span class="stripped">Client IP address</span> — request originates from Collection Server<br>
+          <span class="stripped">HTTP headers</span> — User-Agent, Accept-Language, all removed<br><br>
+          <span class="arrow">→</span> Forward: { <span class="val">ballot_id</span>, <span class="val">encrypted_ballot</span>, <span class="val">zk_proofs</span> } — nothing else
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--l2 anim" style="--i:12">
+      <div class="step-marker"><div class="step-num">8</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Validate proofs, append to Merkle tree</div>
+          <span class="step-actor actor--l2">Bulletin Board</span>
+        </div>
+        <div class="step-desc">Independently validates all ZK proofs (ballot validity + candidate validity). Appends to dual-hash Merkle tree (SHA-256 + Poseidon/BN254), computes new root, signs it, returns inclusion proof.</div>
+        <div class="step-data">
+          <span class="arrow">→</span> Append at <span class="val">position N</span> in dual Merkle tree<br>
+          <span class="arrow">→</span> Return: { <span class="val">merkle_root</span>, <span class="val">inclusion_proof</span>, <span class="val">position</span> }
+        </div>
+      </div>
+    </div>
+
+    <div class="phase anim" style="--i:13"><span class="phase-label">Phase 5 — Receipt + Verification Code</span></div>
+
+    <div class="step step--green anim" style="--i:14">
+      <div class="step-marker"><div class="step-num">9</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Voter receives receipt</div>
+          <span class="step-actor actor--voter">Browser</span>
+        </div>
+        <div class="step-desc">Collection Server returns the Merkle inclusion proof. Voter can save their <code>ballot_id</code> for post-election verification at <code>verify.izbori.bg</code>.</div>
+        <div class="step-data">
+          Receipt: { <span class="val">ballot_id</span>, <span class="val">merkle_root</span>, <span class="val">inclusion_proof</span> }<br>
+          <span class="arrow">→</span> Proves ballot exists in the tree — reveals nothing about content
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--ext anim" style="--i:15">
+      <div class="step-marker"><div class="step-num">10</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-header">
+          <div class="step-title">Return code verification in extension popup</div>
+          <span class="step-actor actor--ext">Extension</span>
+        </div>
+        <div class="step-desc">Verification Service derives a return code from the encrypted ballot (via 3-of-5 threshold trustees), sends it to the extension. The extension compares against the pre-loaded code mapping and shows the result — <strong>completely isolated from page JavaScript</strong>.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="result anim" style="--i:16">
+    <div class="result-card result-card--match">
+      <h4>✓ Codes Match</h4>
+      <p>The return code matches the expected code for the selected party. The correct ballot was encrypted, transmitted, and recorded. The voter can trust the result even if the voting page was compromised by malware.</p>
+    </div>
+    <div class="result-card result-card--mismatch">
+      <h4>✗ Codes Mismatch</h4>
+      <p>Possible malware altered the vote before encryption. Voter should: (1) Re-vote from a different device, (2) Vote in person at a polling station, (3) Report to the election commission.</p>
+    </div>
+  </div>
+
+  <div class="legend anim" style="--i:17">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--voter)"></div>Voter Browser</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--ext)"></div>Browser Extension</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--l1)"></div>Layer 1 — Identity</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--l2)"></div>Layer 2 — Ballots</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--verify)"></div>Verification Service</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div>Voter Receipt</div>
+  </div>
+
+</div>
+</body>
+</html>
