@@ -54,7 +54,7 @@ func (s *PostgresStore) RunMigrations(ctx context.Context) error {
 		return entries[i].Name() < entries[j].Name()
 	})
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
 		sql, err := migrations.ReadFile("migrations/" + entry.Name())
@@ -65,7 +65,10 @@ func (s *PostgresStore) RunMigrations(ctx context.Context) error {
 			return fmt.Errorf("execute migration %s: %w", entry.Name(), err)
 		}
 	}
-	// Create partition for current election
+	// Create partition for current election (defense-in-depth: re-validate UUID)
+	if !uuidRe.MatchString(s.electionID) {
+		return fmt.Errorf("invalid election ID for partition: %q", s.electionID)
+	}
 	sanitizedID := strings.ReplaceAll(s.electionID, "-", "_")
 	partitionSQL := fmt.Sprintf(
 		`CREATE TABLE IF NOT EXISTS voter_ballot_history_p_%s PARTITION OF voter_ballot_history FOR VALUES IN ('%s')`,
@@ -151,7 +154,9 @@ func (s *PostgresStore) Record(ctx context.Context, egnHash, ballotID string, ch
 	err = tx.QueryRow(ctx, upsertSQL,
 		egnHash, s.electionID, ballotID, submittedAt, string(channel), nextSeq, rowHash,
 	).Scan(&prev)
-	if err != nil && err != pgx.ErrNoRows {
+	if err == pgx.ErrNoRows {
+		// First vote: prev CTE found no existing ballot — expected.
+	} else if err != nil {
 		return "", fmt.Errorf("record voter: %w", err)
 	}
 
