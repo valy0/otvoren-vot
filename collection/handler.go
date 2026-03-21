@@ -2,7 +2,8 @@ package main
 
 import (
 	"bytes"
-	"crypto/subtle"
+	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,9 +11,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/valy0/otvoren-vot/collection/votermap"
+	"github.com/valy0/otvoren-vot/pkg/jwtauth"
 )
 
 type CollectionHandler struct {
@@ -22,9 +25,24 @@ type CollectionHandler struct {
 	internalAPIKey    string
 	activeSetAPIKey   string
 	overrideReportDir string
+	// JWT auth fields
+	devAuth        bool
+	jwtPublicKey   ed25519.PublicKey // nil in dev mode
+	authServiceURL string
+	sessionAPIKey  string
+	electionID     string
+	httpClient     *http.Client // timeout-configured, used for both auth + BB
 }
 
-func NewCollectionHandler(store votermap.Store, egnHMACKey []byte, bbURL, apiKey, activeSetKey, overrideReportDir string) *CollectionHandler {
+func NewCollectionHandler(
+	store votermap.Store,
+	egnHMACKey []byte,
+	bbURL, apiKey, activeSetKey, overrideReportDir string,
+	devAuth bool,
+	jwtPublicKey ed25519.PublicKey,
+	authServiceURL, sessionAPIKey, electionID string,
+	httpClient *http.Client,
+) *CollectionHandler {
 	return &CollectionHandler{
 		voterStore:        store,
 		egnHMACKey:        egnHMACKey,
@@ -32,6 +50,12 @@ func NewCollectionHandler(store votermap.Store, egnHMACKey []byte, bbURL, apiKey
 		internalAPIKey:    apiKey,
 		activeSetAPIKey:   activeSetKey,
 		overrideReportDir: overrideReportDir,
+		devAuth:           devAuth,
+		jwtPublicKey:      jwtPublicKey,
+		authServiceURL:    authServiceURL,
+		sessionAPIKey:     sessionAPIKey,
+		electionID:        electionID,
+		httpClient:        httpClient,
 	}
 }
 
@@ -48,23 +72,122 @@ type submitResponse struct {
 	IsOverride bool   `json:"is_override"`
 }
 
-func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request) {
-	// TODO: In production, validate JWT from Auth Service and extract EGN from claims.
-	// Currently accepts X-Voter-EGN header for development only.
-	egn := r.Header.Get("X-Voter-EGN")
-	if egn == "" {
-		writeError(w, http.StatusUnauthorized, "missing_identity", "Voter identity required. Set X-Voter-EGN header (dev) or provide a valid JWT (production).")
-		return
+// extractToken retrieves the session token from the Authorization header (Bearer)
+// or the session cookie. If the Authorization header is present but not Bearer,
+// it rejects immediately without falling through to the cookie.
+func extractToken(r *http.Request) (string, error) {
+	auth := r.Header.Get("Authorization")
+	if auth != "" {
+		if strings.HasPrefix(auth, "Bearer ") {
+			return strings.TrimPrefix(auth, "Bearer "), nil
+		}
+		return "", fmt.Errorf("Authorization header must use Bearer scheme")
 	}
+	if c, err := r.Cookie("session"); err == nil {
+		return c.Value, nil
+	}
+	return "", fmt.Errorf("no session token provided")
+}
+
+// isValidEGN checks whether the given string is a syntactically valid 10-digit EGN.
+func isValidEGN(egn string) bool {
 	if len(egn) != 10 {
-		writeError(w, http.StatusBadRequest, "invalid_egn", "EGN must be exactly 10 digits")
-		return
+		return false
 	}
 	for _, c := range egn {
 		if c < '0' || c > '9' {
-			writeError(w, http.StatusBadRequest, "invalid_egn", "EGN must contain only digits")
+			return false
+		}
+	}
+	return true
+}
+
+// resolveSession calls the auth service to exchange a session ID for the voter's EGN.
+// It retries once on transient errors.
+func (h *CollectionHandler) resolveSession(ctx context.Context, sessionID string) (string, error) {
+	if len(sessionID) != 36 {
+		return "", fmt.Errorf("invalid session ID format")
+	}
+
+	url := h.authServiceURL + "/internal/v1/session/" + sessionID
+
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return "", fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("X-Internal-Key", h.sessionAPIKey)
+
+		resp, err := h.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNotFound {
+			return "", fmt.Errorf("session not found or expired")
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+			return "", fmt.Errorf("auth service returned %d: %s", resp.StatusCode, body)
+		}
+
+		var result struct {
+			EGN string `json:"egn"`
+		}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&result); err != nil {
+			return "", fmt.Errorf("decode session response: %w", err)
+		}
+		return result.EGN, nil
+	}
+	return "", fmt.Errorf("auth service unavailable: %w", lastErr)
+}
+
+func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request) {
+	var egn string
+	if h.devAuth {
+		egn = r.Header.Get("X-Voter-EGN")
+		if !isValidEGN(egn) {
+			writeError(w, http.StatusBadRequest, "invalid_egn", "EGN must be exactly 10 digits")
 			return
 		}
+	} else {
+		tokenStr, err := extractToken(r)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "missing_token", err.Error())
+			return
+		}
+		claims, err := jwtauth.Verify(tokenStr, h.jwtPublicKey)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid_token", "Invalid or expired session")
+			return
+		}
+		if claims.ElectionID != h.electionID {
+			writeError(w, http.StatusForbidden, "wrong_election", "Token issued for different election")
+			return
+		}
+		egn, err = h.resolveSession(r.Context(), claims.Subject)
+		if err != nil {
+			log.Printf("ERROR: session resolution failed: %v", err)
+			writeError(w, http.StatusUnauthorized, "session_error", "Session not found or expired")
+			return
+		}
+		if !isValidEGN(egn) {
+			log.Printf("ERROR: auth service returned invalid EGN format")
+			writeError(w, http.StatusBadGateway, "invalid_session", "Auth service returned invalid identity")
+			return
+		}
+	}
+
+	if egn == "" {
+		writeError(w, http.StatusUnauthorized, "missing_identity", "Voter identity required")
+		return
 	}
 
 	egnHash := votermap.HashEGN(egn, h.egnHMACKey)
@@ -130,7 +253,7 @@ func (h *CollectionHandler) forwardToBulletinBoard(body []byte) (*struct {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Key", h.internalAPIKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("connect to bulletin board: %w", err)
 	}
@@ -206,14 +329,4 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	resp.Error.Code = code
 	resp.Error.Message = message
 	json.NewEncoder(w).Encode(resp)
-}
-
-func requireKey(key string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Key")), []byte(key)) != 1 {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid API key")
-			return
-		}
-		next(w, r)
-	}
 }

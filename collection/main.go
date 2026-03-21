@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/valy0/otvoren-vot/collection/store"
 	"github.com/valy0/otvoren-vot/collection/votermap"
+	"github.com/valy0/otvoren-vot/pkg/jwtauth"
+	"github.com/valy0/otvoren-vot/pkg/middleware"
 )
 
 func main() {
@@ -25,6 +28,30 @@ func main() {
 	activeSetKey := os.Getenv("ACTIVE_SET_API_KEY")
 	if activeSetKey == "" {
 		log.Fatal("ACTIVE_SET_API_KEY environment variable must be set")
+	}
+
+	// Dev auth safety: prevent enabling dev auth when a real database is configured.
+	if cfg.DevAuth && cfg.DatabaseURL != "" {
+		log.Fatal("COLLECTION_DEV_AUTH cannot be true when DATABASE_URL is set (production safety)")
+	}
+	if !cfg.DevAuth && cfg.AuthJWTPublicKey == "" {
+		log.Fatal("AUTH_JWT_PUBLIC_KEY must be set when dev auth is disabled")
+	}
+	if !cfg.DevAuth && cfg.SessionAPIKey == "" {
+		log.Fatal("SESSION_API_KEY must be set when dev auth is disabled")
+	}
+	if cfg.DevAuth {
+		log.Println("WARNING: Dev auth enabled — X-Voter-EGN header accepted without JWT")
+	}
+
+	// Load JWT public key (production mode only).
+	var jwtPubKey ed25519.PublicKey
+	if !cfg.DevAuth {
+		var err error
+		jwtPubKey, err = jwtauth.LoadEd25519PublicKey(cfg.AuthJWTPublicKey)
+		if err != nil {
+			log.Fatalf("Failed to load JWT public key: %v", err)
+		}
 	}
 
 	ctx := context.Background()
@@ -58,12 +85,18 @@ func main() {
 		voterStore = votermap.NewMemoryStore([]byte(cfg.HistoryHMACKey))
 	}
 
-	handler := NewCollectionHandler(voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey, cfg.OverrideReportDir)
+	httpClient := &http.Client{Timeout: 3 * time.Second}
+
+	handler := NewCollectionHandler(
+		voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey, cfg.OverrideReportDir,
+		cfg.DevAuth, jwtPubKey, cfg.AuthServiceURL, cfg.SessionAPIKey, cfg.ElectionID,
+		httpClient,
+	)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/submit", handler.HandleSubmit)
-	mux.HandleFunc("GET /internal/v1/active-set", requireKey(activeSetKey, handler.HandleActiveSet))
-	mux.HandleFunc("GET /internal/v1/override-report", requireKey(activeSetKey, handler.HandleOverrideReport))
+	mux.HandleFunc("GET /internal/v1/active-set", middleware.RequireKey(activeSetKey, handler.HandleActiveSet))
+	mux.HandleFunc("GET /internal/v1/override-report", middleware.RequireKey(activeSetKey, handler.HandleOverrideReport))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		size, err := voterStore.Size(r.Context())
 		if err != nil {

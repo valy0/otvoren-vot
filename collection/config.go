@@ -11,6 +11,9 @@ type Config struct {
 	EGNHMACKey        string
 	HistoryHMACKey    string
 	OverrideReportDir string
+	DevAuth           bool
+	AuthJWTPublicKey  string
+	SessionAPIKey     string
 }
 
 func LoadConfig() *Config {
@@ -23,6 +26,9 @@ func LoadConfig() *Config {
 		EGNHMACKey:        envOr("EGN_HMAC_KEY", ""),
 		HistoryHMACKey:    envOr("HISTORY_HMAC_KEY", ""),
 		OverrideReportDir: envOr("OVERRIDE_REPORT_DIR", ""),
+		DevAuth:           os.Getenv("COLLECTION_DEV_AUTH") == "true",
+		AuthJWTPublicKey:  envOr("AUTH_JWT_PUBLIC_KEY", ""),
+		SessionAPIKey:     envOr("SESSION_API_KEY", ""),
 	}
 }
 
