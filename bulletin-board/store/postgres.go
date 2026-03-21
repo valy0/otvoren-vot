@@ -68,6 +68,11 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 	return nil
 }
 
+// Pool returns the underlying pgxpool for administrative operations (tests only).
+func (s *Store) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // InsertBallot inserts a new ballot record. Returns the assigned position.
 func (s *Store) InsertBallot(ctx context.Context, rec *BallotRecord) error {
 	_, err := s.pool.Exec(ctx,
