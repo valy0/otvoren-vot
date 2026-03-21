@@ -148,9 +148,11 @@ All data required for verification is available through the [Open Data API](docs
 
 ## Documentation
 
-- [Architecture](docs/architecture/) — service design, data flows, deployment topology
-- [Protocol](docs/protocol/) — cryptographic protocol specifications
-- [CIK Deliverables](docs/cik/) — threat model, legal compliance, cost projection, audit plan (Bulgarian)
+Full documentation index: [docs/README.md](docs/README.md)
+
+- [Architecture](docs/architecture/) — service design, data flows, deployment topology (8 documents)
+- [Protocol](docs/protocol/) — cryptographic protocol specifications (7 documents)
+- [CIK Deliverables](docs/cik/) — threat model, legal compliance, cost projection, audit plan, certification path, PKI CP/CPS (6 documents, Bulgarian)
 
 ---
 
