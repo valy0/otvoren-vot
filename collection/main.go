@@ -58,11 +58,12 @@ func main() {
 		voterStore = votermap.NewMemoryStore([]byte(cfg.HistoryHMACKey))
 	}
 
-	handler := NewCollectionHandler(voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey)
+	handler := NewCollectionHandler(voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey, cfg.OverrideReportDir)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/submit", handler.HandleSubmit)
 	mux.HandleFunc("GET /internal/v1/active-set", requireKey(activeSetKey, handler.HandleActiveSet))
+	mux.HandleFunc("GET /internal/v1/override-report", requireKey(activeSetKey, handler.HandleOverrideReport))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		size, err := voterStore.Size(r.Context())
 		if err != nil {

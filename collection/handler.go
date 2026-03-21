@@ -8,26 +8,30 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/valy0/otvoren-vot/collection/votermap"
 )
 
 type CollectionHandler struct {
-	voterStore       votermap.Store
-	egnHMACKey       []byte
-	bulletinBoardURL string
-	internalAPIKey   string
-	activeSetAPIKey  string
+	voterStore        votermap.Store
+	egnHMACKey        []byte
+	bulletinBoardURL  string
+	internalAPIKey    string
+	activeSetAPIKey   string
+	overrideReportDir string
 }
 
-func NewCollectionHandler(store votermap.Store, egnHMACKey []byte, bbURL, apiKey, activeSetKey string) *CollectionHandler {
+func NewCollectionHandler(store votermap.Store, egnHMACKey []byte, bbURL, apiKey, activeSetKey, overrideReportDir string) *CollectionHandler {
 	return &CollectionHandler{
-		voterStore:       store,
-		egnHMACKey:       egnHMACKey,
-		bulletinBoardURL: bbURL,
-		internalAPIKey:   apiKey,
-		activeSetAPIKey:  activeSetKey,
+		voterStore:        store,
+		egnHMACKey:        egnHMACKey,
+		bulletinBoardURL:  bbURL,
+		internalAPIKey:    apiKey,
+		activeSetAPIKey:   activeSetKey,
+		overrideReportDir: overrideReportDir,
 	}
 }
 
@@ -164,6 +168,28 @@ func (h *CollectionHandler) HandleActiveSet(w http.ResponseWriter, r *http.Reque
 		"active_set": set,
 		"size":       len(set),
 	})
+}
+
+// HandleOverrideReport serves the pre-generated override report header.
+// The report is generated offline by the CLI tool, not by this endpoint.
+func (h *CollectionHandler) HandleOverrideReport(w http.ResponseWriter, r *http.Request) {
+	if h.overrideReportDir == "" {
+		writeError(w, http.StatusNotFound, "not_configured", "Override report directory not configured")
+		return
+	}
+	headerPath := filepath.Join(h.overrideReportDir, "header.json")
+	data, err := os.ReadFile(headerPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "not_generated", "Override report has not been generated yet")
+			return
+		}
+		log.Printf("ERROR: failed to read override report: %v", err)
+		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read override report")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 type errorResp struct {
