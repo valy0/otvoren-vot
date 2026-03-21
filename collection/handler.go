@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -13,15 +14,17 @@ import (
 )
 
 type CollectionHandler struct {
-	voterMap         *votermap.VoterMap
+	voterStore       votermap.Store
+	egnHMACKey       []byte
 	bulletinBoardURL string
 	internalAPIKey   string
 	activeSetAPIKey  string
 }
 
-func NewCollectionHandler(vm *votermap.VoterMap, bbURL, apiKey, activeSetKey string) *CollectionHandler {
+func NewCollectionHandler(store votermap.Store, egnHMACKey []byte, bbURL, apiKey, activeSetKey string) *CollectionHandler {
 	return &CollectionHandler{
-		voterMap:         vm,
+		voterStore:       store,
+		egnHMACKey:       egnHMACKey,
 		bulletinBoardURL: bbURL,
 		internalAPIKey:   apiKey,
 		activeSetAPIKey:  activeSetKey,
@@ -60,6 +63,8 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	egnHash := votermap.HashEGN(egn, h.egnHMACKey)
+
 	var req submitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON")
@@ -71,7 +76,12 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Record in voter map (handles override)
-	prevBallotID := h.voterMap.Record(egn, req.BallotID, "online", time.Now().Unix())
+	prevBallotID, err := h.voterStore.Record(r.Context(), egnHash, req.BallotID, "online", time.Now().Unix())
+	if err != nil {
+		log.Printf("ERROR: failed to record vote: %v", err)
+		writeError(w, http.StatusInternalServerError, "store_error", "Failed to record vote")
+		return
+	}
 
 	// Forward to bulletin board (identity stripped — no EGN sent)
 	bbReq := map[string]interface{}{
@@ -143,7 +153,12 @@ func (h *CollectionHandler) forwardToBulletinBoard(body []byte) (*struct {
 
 // HandleActiveSet returns the current active set for deduplication (used after polls close).
 func (h *CollectionHandler) HandleActiveSet(w http.ResponseWriter, r *http.Request) {
-	set := h.voterMap.ActiveSet()
+	set, err := h.voterStore.ActiveSet(r.Context())
+	if err != nil {
+		log.Printf("ERROR: failed to retrieve active set: %v", err)
+		writeError(w, http.StatusInternalServerError, "store_error", "Failed to retrieve active set")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"active_set": set,

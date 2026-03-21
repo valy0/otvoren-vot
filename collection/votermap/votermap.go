@@ -1,78 +1,94 @@
 package votermap
 
-import "sync"
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"sync"
+)
 
-// VoterMap tracks which ballot ID is active for each voter (by EGN).
-// This is the core data structure for deduplication and bidirectional override.
-type VoterMap struct {
+// Store is the interface for voter ballot tracking.
+// Implementations must be safe for concurrent use.
+type Store interface {
+	Record(ctx context.Context, egnHash, ballotID, channel string, timestamp int64) (prevBallotID string, err error)
+	GetActiveBallotID(ctx context.Context, egnHash string) (string, bool, error)
+	ActiveSet(ctx context.Context) ([]string, error)
+	Size(ctx context.Context) (int, error)
+	HasVoted(ctx context.Context, egnHash string) (bool, error)
+}
+
+// HashEGN returns a hex-encoded HMAC-SHA256 of the raw EGN using a
+// deployment-specific key. The keyed hash prevents brute-force reversal
+// over the small EGN keyspace (~tens of millions 10-digit numbers).
+func HashEGN(egn string, key []byte) string {
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(egn))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// MemoryStore is an in-memory Store implementation for testing and development.
+type MemoryStore struct {
 	mu      sync.RWMutex
-	mapping map[string]entry // EGN -> entry
+	mapping map[string]entry // egnHash -> entry
 }
 
 type entry struct {
 	BallotID  string
-	Channel   string // "online" or "in-person"
+	Channel   string // "online" or "in_person"
 	Timestamp int64  // unix timestamp
 }
 
-// New creates an empty VoterMap.
-func New() *VoterMap {
-	return &VoterMap{mapping: make(map[string]entry)}
+// NewMemoryStore creates an empty in-memory Store.
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{mapping: make(map[string]entry)}
 }
 
-// Record records or updates a voter's active ballot.
-// If the voter already has a ballot, the new one replaces it (override).
-// Returns the previous ballot ID (empty if first vote).
-func (vm *VoterMap) Record(egn, ballotID, channel string, timestamp int64) string {
-	vm.mu.Lock()
-	defer vm.mu.Unlock()
+func (ms *MemoryStore) Record(_ context.Context, egnHash, ballotID, channel string, timestamp int64) (string, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 
 	prev := ""
-	if existing, ok := vm.mapping[egn]; ok {
+	if existing, ok := ms.mapping[egnHash]; ok {
 		prev = existing.BallotID
 	}
-	vm.mapping[egn] = entry{
+	ms.mapping[egnHash] = entry{
 		BallotID:  ballotID,
 		Channel:   channel,
 		Timestamp: timestamp,
 	}
-	return prev
+	return prev, nil
 }
 
-// GetActiveBallotID returns the current active ballot ID for a voter.
-func (vm *VoterMap) GetActiveBallotID(egn string) (string, bool) {
-	vm.mu.RLock()
-	defer vm.mu.RUnlock()
-	e, ok := vm.mapping[egn]
+func (ms *MemoryStore) GetActiveBallotID(_ context.Context, egnHash string) (string, bool, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	e, ok := ms.mapping[egnHash]
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
-	return e.BallotID, true
+	return e.BallotID, true, nil
 }
 
-// ActiveSet returns all active ballot IDs (one per voter).
-// This is used at polls close for deduplication.
-func (vm *VoterMap) ActiveSet() []string {
-	vm.mu.RLock()
-	defer vm.mu.RUnlock()
-	ids := make([]string, 0, len(vm.mapping))
-	for _, e := range vm.mapping {
+func (ms *MemoryStore) ActiveSet(_ context.Context) ([]string, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	ids := make([]string, 0, len(ms.mapping))
+	for _, e := range ms.mapping {
 		ids = append(ids, e.BallotID)
 	}
-	return ids
+	return ids, nil
 }
 
-// Size returns the number of unique voters who have voted.
-func (vm *VoterMap) Size() int {
-	vm.mu.RLock()
-	defer vm.mu.RUnlock()
-	return len(vm.mapping)
+func (ms *MemoryStore) Size(_ context.Context) (int, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	return len(ms.mapping), nil
 }
 
-// HasVoted returns whether a voter has already voted.
-func (vm *VoterMap) HasVoted(egn string) bool {
-	vm.mu.RLock()
-	defer vm.mu.RUnlock()
-	_, ok := vm.mapping[egn]
-	return ok
+func (ms *MemoryStore) HasVoted(_ context.Context, egnHash string) (bool, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	_, ok := ms.mapping[egnHash]
+	return ok, nil
 }
