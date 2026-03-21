@@ -228,3 +228,68 @@ func (s *PostgresStore) HasVoted(ctx context.Context, egnHash string) (bool, err
 	}
 	return exists, nil
 }
+
+// GetOverrideHistory returns the full submission history for a voter, ordered by seq.
+func (s *PostgresStore) GetOverrideHistory(ctx context.Context, egnHash string) ([]votermap.HistoryEntry, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT ballot_id, channel, submitted_at, seq, row_hash FROM voter_ballot_history
+		 WHERE egn_hash = $1 AND election_id = $2 ORDER BY seq`,
+		egnHash, s.electionID)
+	if err != nil {
+		return nil, fmt.Errorf("query override history: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []votermap.HistoryEntry
+	for rows.Next() {
+		var e votermap.HistoryEntry
+		if err := rows.Scan(&e.BallotID, &e.Channel, &e.SubmittedAt, &e.Seq, &e.RowHash); err != nil {
+			return nil, fmt.Errorf("scan history entry: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// GetAllOverrideChains streams all voters with >= 2 submissions (actual overrides).
+// Calls fn once per voter. If fn returns error, iteration stops.
+func (s *PostgresStore) GetAllOverrideChains(ctx context.Context, fn func(votermap.OverrideChain) error) error {
+	rows, err := s.pool.Query(ctx,
+		`SELECT egn_hash, ballot_id, channel, submitted_at, seq, row_hash
+		 FROM (
+			 SELECT *, COUNT(*) OVER (PARTITION BY egn_hash) AS cnt
+			 FROM voter_ballot_history
+			 WHERE election_id = $1
+		 ) sub
+		 WHERE cnt >= 2
+		 ORDER BY egn_hash, seq`, s.electionID)
+	if err != nil {
+		return fmt.Errorf("query override chains: %w", err)
+	}
+	defer rows.Close()
+
+	var current votermap.OverrideChain
+	for rows.Next() {
+		var egnHash string
+		var e votermap.HistoryEntry
+		if err := rows.Scan(&egnHash, &e.BallotID, &e.Channel, &e.SubmittedAt, &e.Seq, &e.RowHash); err != nil {
+			return fmt.Errorf("scan chain entry: %w", err)
+		}
+		if egnHash != current.EgnHash {
+			if current.EgnHash != "" {
+				if err := fn(current); err != nil {
+					return err
+				}
+			}
+			current = votermap.OverrideChain{EgnHash: egnHash}
+		}
+		current.Submissions = append(current.Submissions, e)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if current.EgnHash != "" {
+		return fn(current)
+	}
+	return nil
+}
