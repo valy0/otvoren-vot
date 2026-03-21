@@ -152,3 +152,6 @@ func (b *Board) InclusionProof(position int64) ([]merkle.ProofNode, error) {
 func (b *Board) MerkleTree() *merkle.Tree {
 	return b.tree
 }
+
+// Store returns the underlying store for read operations.
+func (b *Board) Store() *store.Store { return b.store }
