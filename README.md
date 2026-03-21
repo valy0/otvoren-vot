@@ -36,7 +36,12 @@ The system defends against client-side malware through a mandatory browser exten
 
 The system uses a strict two-layer architecture that enforces separation between identity and ballot data at the network level. No single component can both identify a voter and learn how they voted.
 
-[![Two-Layer System Architecture](docs/images/architecture.png)](docs/diagrams/otvoren-vot-architecture.html)
+<a href="docs/diagrams/otvoren-vot-architecture.html">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.png">
+  <img src="docs/images/architecture-light.png" alt="Two-Layer System Architecture">
+</picture>
+</a>
 
 **Layer 1 — Identity** (Auth Service + Collection Server) knows the voter's identity (ЕГН) and which ballot ID belongs to them, but never sees ballot content — ballots are encrypted before submission and the identity is stripped before forwarding. **Layer 2 — Ballots** (Bulletin Board, Tally Service, Verification Service) sees all encrypted ballots and ZK proofs but receives only random ballot IDs — it cannot link any ballot to a voter.
 
@@ -48,7 +53,12 @@ The system uses a strict two-layer architecture that enforces separation between
 
 **Online Voting Flow**
 
-[![Online Voting Flow](docs/images/voting-flow.png)](docs/diagrams/otvoren-vot-voting-flow.html)
+<a href="docs/diagrams/otvoren-vot-voting-flow.html">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/voting-flow-dark.png">
+  <img src="docs/images/voting-flow-light.png" alt="Online Voting Flow">
+</picture>
+</a>
 
 From eAuth 2.0 authentication through client-side encryption, identity stripping, Merkle tree inclusion, to browser extension return code verification.
 
@@ -57,7 +67,12 @@ From eAuth 2.0 authentication through client-side encryption, identity stripping
 
 **Decryption Ceremony**
 
-[![Decryption Ceremony](docs/images/ceremony.png)](docs/diagrams/otvoren-vot-ceremony.html)
+<a href="docs/diagrams/otvoren-vot-ceremony.html">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/ceremony-dark.png">
+  <img src="docs/images/ceremony-light.png" alt="Decryption Ceremony">
+</picture>
+</a>
 
 Nationally televised ceremony: 9 trustees with HSMs, ZK dedup proof, homomorphic tallying, threshold decryption, and live results.
 
@@ -67,7 +82,12 @@ Nationally televised ceremony: 9 trustees with HSMs, ZK dedup proof, homomorphic
 
 **Verification & Trust Chain**
 
-[![Verification & Trust Chain](docs/images/verification.png)](docs/diagrams/otvoren-vot-verification.html)
+<a href="docs/diagrams/otvoren-vot-verification.html">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/verification-dark.png">
+  <img src="docs/images/verification-light.png" alt="Verification & Trust Chain">
+</picture>
+</a>
 
 Three levels of verification (immediate return codes, individual inclusion check, full independent audit) backed by four cryptographic proofs (ballot validity, deduplication SNARK, partial decryption, tally correctness).
 
