@@ -4,11 +4,14 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"regexp"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 //go:embed migrations/*.sql
 var migrations embed.FS
@@ -20,7 +23,11 @@ type PostgresStore struct {
 }
 
 // New creates a new PostgresStore connected to the given database URL.
+// electionID must be a valid UUID.
 func New(ctx context.Context, databaseURL, electionID string) (*PostgresStore, error) {
+	if !uuidRe.MatchString(electionID) {
+		return nil, fmt.Errorf("invalid ELECTION_ID %q: must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000)", electionID)
+	}
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
@@ -63,7 +70,7 @@ func (s *PostgresStore) Record(ctx context.Context, egnHash, ballotID, channel s
 		)
 		INSERT INTO voters (egn_hash, election_id, ballot_id, submitted_at, channel)
 		VALUES ($1, $2, $3, to_timestamp($4), $5)
-		ON CONFLICT (egn_hash) DO UPDATE
+		ON CONFLICT (egn_hash, election_id) DO UPDATE
 			SET ballot_id = EXCLUDED.ballot_id,
 			    submitted_at = EXCLUDED.submitted_at,
 			    channel = EXCLUDED.channel

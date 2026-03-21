@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -14,14 +15,16 @@ import (
 
 type CollectionHandler struct {
 	voterStore       votermap.Store
+	egnHMACKey       []byte
 	bulletinBoardURL string
 	internalAPIKey   string
 	activeSetAPIKey  string
 }
 
-func NewCollectionHandler(store votermap.Store, bbURL, apiKey, activeSetKey string) *CollectionHandler {
+func NewCollectionHandler(store votermap.Store, egnHMACKey []byte, bbURL, apiKey, activeSetKey string) *CollectionHandler {
 	return &CollectionHandler{
 		voterStore:       store,
+		egnHMACKey:       egnHMACKey,
 		bulletinBoardURL: bbURL,
 		internalAPIKey:   apiKey,
 		activeSetAPIKey:  activeSetKey,
@@ -60,7 +63,7 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	egnHash := votermap.HashEGN(egn)
+	egnHash := votermap.HashEGN(egn, h.egnHMACKey)
 
 	var req submitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -75,7 +78,8 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 	// Record in voter map (handles override)
 	prevBallotID, err := h.voterStore.Record(r.Context(), egnHash, req.BallotID, "online", time.Now().Unix())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", fmt.Sprintf("Failed to record vote: %v", err))
+		log.Printf("ERROR: failed to record vote: %v", err)
+		writeError(w, http.StatusInternalServerError, "store_error", "Failed to record vote")
 		return
 	}
 
@@ -151,7 +155,8 @@ func (h *CollectionHandler) forwardToBulletinBoard(body []byte) (*struct {
 func (h *CollectionHandler) HandleActiveSet(w http.ResponseWriter, r *http.Request) {
 	set, err := h.voterStore.ActiveSet(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", fmt.Sprintf("Failed to retrieve active set: %v", err))
+		log.Printf("ERROR: failed to retrieve active set: %v", err)
+		writeError(w, http.StatusInternalServerError, "store_error", "Failed to retrieve active set")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

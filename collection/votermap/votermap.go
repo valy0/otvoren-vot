@@ -2,6 +2,7 @@ package votermap
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"sync"
@@ -17,11 +18,13 @@ type Store interface {
 	HasVoted(ctx context.Context, egnHash string) (bool, error)
 }
 
-// HashEGN returns a hex-encoded SHA-256 hash of the raw EGN.
-// The Collection Server must never store plaintext EGNs.
-func HashEGN(egn string) string {
-	h := sha256.Sum256([]byte(egn))
-	return hex.EncodeToString(h[:])
+// HashEGN returns a hex-encoded HMAC-SHA256 of the raw EGN using a
+// deployment-specific key. The keyed hash prevents brute-force reversal
+// over the small EGN keyspace (~tens of millions 10-digit numbers).
+func HashEGN(egn string, key []byte) string {
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(egn))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // MemoryStore is an in-memory Store implementation for testing and development.

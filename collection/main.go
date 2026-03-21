@@ -29,6 +29,14 @@ func main() {
 
 	ctx := context.Background()
 
+	egnHMACKey := []byte(cfg.EGNHMACKey)
+	if cfg.DatabaseURL != "" && cfg.EGNHMACKey == "" {
+		log.Fatal("EGN_HMAC_KEY must be set when using PostgreSQL (required to protect voter identity hashes)")
+	}
+	if cfg.EGNHMACKey == "" {
+		log.Println("WARNING: No EGN_HMAC_KEY set, using empty key (development only)")
+	}
+
 	var voterStore votermap.Store
 	if cfg.DatabaseURL != "" {
 		pgStore, err := store.New(ctx, cfg.DatabaseURL, cfg.ElectionID)
@@ -46,7 +54,7 @@ func main() {
 		voterStore = votermap.NewMemoryStore()
 	}
 
-	handler := NewCollectionHandler(voterStore, cfg.BulletinBoardURL, apiKey, activeSetKey)
+	handler := NewCollectionHandler(voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/submit", handler.HandleSubmit)

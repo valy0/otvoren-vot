@@ -5,18 +5,23 @@ import (
 	"testing"
 )
 
-var ctx = context.Background()
+var (
+	ctx         = context.Background()
+	testHMACKey = []byte("test-hmac-key")
+)
+
+func h(egn string) string { return HashEGN(egn, testHMACKey) }
 
 func TestRecordAndRetrieve(t *testing.T) {
 	vm := NewMemoryStore()
-	prev, err := vm.Record(ctx, "8501011234", "ballot-1", "online", 1000)
+	prev, err := vm.Record(ctx, h("8501011234"), "ballot-1", "online", 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if prev != "" {
 		t.Fatal("first vote should have no previous")
 	}
-	id, ok, err := vm.GetActiveBallotID(ctx, "8501011234")
+	id, ok, err := vm.GetActiveBallotID(ctx, h("8501011234"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,15 +32,15 @@ func TestRecordAndRetrieve(t *testing.T) {
 
 func TestOverride(t *testing.T) {
 	vm := NewMemoryStore()
-	vm.Record(ctx, "8501011234", "ballot-1", "online", 1000)
-	prev, err := vm.Record(ctx, "8501011234", "ballot-2", "in-person", 2000)
+	vm.Record(ctx, h("8501011234"), "ballot-1", "online", 1000)
+	prev, err := vm.Record(ctx, h("8501011234"), "ballot-2", "in-person", 2000)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if prev != "ballot-1" {
 		t.Fatalf("expected previous ballot-1, got %s", prev)
 	}
-	id, _, err := vm.GetActiveBallotID(ctx, "8501011234")
+	id, _, err := vm.GetActiveBallotID(ctx, h("8501011234"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,11 +51,11 @@ func TestOverride(t *testing.T) {
 
 func TestActiveSet(t *testing.T) {
 	vm := NewMemoryStore()
-	vm.Record(ctx, "1111111111", "b1", "online", 1000)
-	vm.Record(ctx, "2222222222", "b2", "online", 1000)
-	vm.Record(ctx, "3333333333", "b3", "in-person", 1000)
+	vm.Record(ctx, h("1111111111"), "b1", "online", 1000)
+	vm.Record(ctx, h("2222222222"), "b2", "online", 1000)
+	vm.Record(ctx, h("3333333333"), "b3", "in-person", 1000)
 	// Override voter 1
-	vm.Record(ctx, "1111111111", "b4", "in-person", 2000)
+	vm.Record(ctx, h("1111111111"), "b4", "in-person", 2000)
 
 	set, err := vm.ActiveSet(ctx)
 	if err != nil {
@@ -76,9 +81,9 @@ func TestSize(t *testing.T) {
 	if size != 0 {
 		t.Fatal("empty map should have size 0")
 	}
-	vm.Record(ctx, "1111111111", "b1", "online", 1000)
-	vm.Record(ctx, "2222222222", "b2", "online", 1000)
-	vm.Record(ctx, "1111111111", "b3", "online", 2000) // override, not new voter
+	vm.Record(ctx, h("1111111111"), "b1", "online", 1000)
+	vm.Record(ctx, h("2222222222"), "b2", "online", 1000)
+	vm.Record(ctx, h("1111111111"), "b3", "online", 2000) // override, not new voter
 	size, err = vm.Size(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -90,15 +95,15 @@ func TestSize(t *testing.T) {
 
 func TestHasVoted(t *testing.T) {
 	vm := NewMemoryStore()
-	voted, err := vm.HasVoted(ctx, "8501011234")
+	voted, err := vm.HasVoted(ctx, h("8501011234"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if voted {
 		t.Fatal("should not have voted yet")
 	}
-	vm.Record(ctx, "8501011234", "b1", "online", 1000)
-	voted, err = vm.HasVoted(ctx, "8501011234")
+	vm.Record(ctx, h("8501011234"), "b1", "online", 1000)
+	voted, err = vm.HasVoted(ctx, h("8501011234"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,16 +113,22 @@ func TestHasVoted(t *testing.T) {
 }
 
 func TestHashEGN(t *testing.T) {
-	h1 := HashEGN("8501011234")
-	h2 := HashEGN("8501011234")
+	key := []byte("test-key")
+	h1 := HashEGN("8501011234", key)
+	h2 := HashEGN("8501011234", key)
 	if h1 != h2 {
 		t.Fatal("same input should produce same hash")
 	}
 	if len(h1) != 64 {
 		t.Fatalf("expected 64 hex chars, got %d", len(h1))
 	}
-	h3 := HashEGN("9912319999")
+	h3 := HashEGN("9912319999", key)
 	if h1 == h3 {
 		t.Fatal("different inputs should produce different hashes")
+	}
+	// Different key produces different hash
+	h4 := HashEGN("8501011234", []byte("other-key"))
+	if h1 == h4 {
+		t.Fatal("different keys should produce different hashes")
 	}
 }

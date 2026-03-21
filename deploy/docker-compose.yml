@@ -69,6 +69,7 @@ services:
       ACTIVE_SET_API_KEY: ${ACTIVE_SET_API_KEY:-dev-active-key-change-in-production}
       DATABASE_URL: postgres://collection:dev@postgres-collection:5432/collection?sslmode=disable
       ELECTION_ID: ${ELECTION_ID:-00000000-0000-0000-0000-000000000000}
+      EGN_HMAC_KEY: ${EGN_HMAC_KEY:?EGN_HMAC_KEY must be set}
     ports:
       - "8083:8083"
     depends_on:

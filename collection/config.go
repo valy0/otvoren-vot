@@ -8,6 +8,7 @@ type Config struct {
 	AuthServiceURL   string
 	DatabaseURL      string
 	ElectionID       string
+	EGNHMACKey       string
 }
 
 func LoadConfig() *Config {
@@ -17,6 +18,7 @@ func LoadConfig() *Config {
 		AuthServiceURL:   envOr("AUTH_SERVICE_URL", "http://localhost:8082"),
 		DatabaseURL:      envOr("DATABASE_URL", ""),
 		ElectionID:       envOr("ELECTION_ID", "00000000-0000-0000-0000-000000000000"),
+		EGNHMACKey:       envOr("EGN_HMAC_KEY", ""),
 	}
 }
 
