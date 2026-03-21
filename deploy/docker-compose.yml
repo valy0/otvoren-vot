@@ -47,6 +47,18 @@ services:
       postgres:
         condition: service_healthy
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   auth:
     build:
       context: ..
@@ -54,8 +66,22 @@ services:
     environment:
       LISTEN_ADDR: ":8082"
       EAUTH_MOCK: "true"  # Set to "false" for production
+      REDIS_URL: redis://redis:6379
+      AUTH_JWT_PRIVATE_KEY: /keys/auth-private.pem
+      ELECTION_ID: ${ELECTION_ID:-00000000-0000-0000-0000-000000000000}
+      SESSION_API_KEY: ${SESSION_API_KEY:-dev-session-key-change-in-production}
     ports:
       - "8082:8082"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./keys:/keys:ro
 
   collection:
     build:
@@ -70,6 +96,9 @@ services:
       DATABASE_URL: postgres://collection:dev@postgres-collection:5432/collection?sslmode=disable
       ELECTION_ID: ${ELECTION_ID:-00000000-0000-0000-0000-000000000000}
       EGN_HMAC_KEY: ${EGN_HMAC_KEY:?EGN_HMAC_KEY must be set}
+      AUTH_JWT_PUBLIC_KEY: /keys/auth-public.pem
+      SESSION_API_KEY: ${SESSION_API_KEY:-dev-session-key-change-in-production}
+      COLLECTION_DEV_AUTH: "false"
     ports:
       - "8083:8083"
     depends_on:
@@ -78,7 +107,9 @@ services:
       bulletin-board:
         condition: service_started
       auth:
-        condition: service_started
+        condition: service_healthy
+    volumes:
+      - ./keys:/keys:ro
 
   tally:
     build:
@@ -114,3 +145,4 @@ services:
 volumes:
   pgdata:
   pgdata-collection:
+  redis-data:
