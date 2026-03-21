@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
@@ -53,12 +52,12 @@ func (s *Signer) SignRoot(b *Board) (*SignedRoot, error) {
 	data := fmt.Sprintf("%s|%d|%s", root, size, now.Format(time.RFC3339Nano))
 	hash := sha256.Sum256([]byte(data))
 
-	r, ss, err := ecdsa.Sign(rand.Reader, s.key, hash[:])
+	sigBytes, err := ecdsa.SignASN1(rand.Reader, s.key, hash[:])
 	if err != nil {
 		return nil, err
 	}
 
-	sig := base64.StdEncoding.EncodeToString(append(r.Bytes(), ss.Bytes()...))
+	sig := base64.StdEncoding.EncodeToString(sigBytes)
 
 	return &SignedRoot{
 		RootSHA256:  root,
@@ -77,16 +76,8 @@ func VerifySignature(pub *ecdsa.PublicKey, sr *SignedRoot) bool {
 	if err != nil {
 		return false
 	}
-	if len(sigBytes) < 2 {
-		return false
-	}
 
-	// Split into r and s (variable length big-endian integers)
-	half := len(sigBytes) / 2
-	r := new(big.Int).SetBytes(sigBytes[:half])
-	ss := new(big.Int).SetBytes(sigBytes[half:])
-
-	return ecdsa.Verify(pub, hash[:], r, ss)
+	return ecdsa.VerifyASN1(pub, hash[:], sigBytes)
 }
 
 // ToStoreRecord converts to a store record for persistence.

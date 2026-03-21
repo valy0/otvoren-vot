@@ -16,6 +16,11 @@ import (
 
 func main() {
 	cfg := LoadConfig()
+
+	if cfg.InternalAPIKey == "" {
+		log.Fatal("INTERNAL_API_KEY environment variable must be set")
+	}
+
 	ctx := context.Background()
 
 	// Connect to PostgreSQL

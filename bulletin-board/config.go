@@ -16,7 +16,7 @@ func LoadConfig() *Config {
 		DatabaseURL:    envOr("DATABASE_URL", "postgres://board:dev@localhost:5432/bulletin_board?sslmode=disable"),
 		ListenAddr:     envOr("LISTEN_ADDR", ":8080"),
 		SigningKeyPath: envOr("SIGNING_KEY_PATH", ""),
-		InternalAPIKey: envOr("INTERNAL_API_KEY", "dev-key"),
+		InternalAPIKey: os.Getenv("INTERNAL_API_KEY"), // no fallback — must be set explicitly
 	}
 }
 

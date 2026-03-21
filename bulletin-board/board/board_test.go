@@ -66,8 +66,7 @@ func TestAppendAndRetrieve(t *testing.T) {
 	}
 
 	// Verify Merkle proof
-	leafData := append([]byte("ballot-1"), json.RawMessage(`{"v":[1,0]}`)...)
-	leafData = append(leafData, json.RawMessage(`{"p":[]}`)...)
+	leafData := EncodeLeaf("ballot-1", json.RawMessage(`{"v":[1,0]}`), json.RawMessage(`{"p":[]}`))
 	rootBytes, _ := hex.DecodeString(b.Root())
 	if !merkle.VerifyInclusion(rootBytes, leafData, 0, b.Size(), proof) {
 		t.Fatal("Merkle inclusion proof should verify")

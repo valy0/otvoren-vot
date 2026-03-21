@@ -1,8 +1,10 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"embed"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -162,10 +164,16 @@ func (s *Store) GetAllLeafData(ctx context.Context) ([][]byte, error) {
 		if err := rows.Scan(&ballotID, &encBallot, &proofs); err != nil {
 			return nil, err
 		}
-		// Leaf = ballot_id || encrypted_ballot || zk_proofs
-		leaf := append([]byte(ballotID), encBallot...)
-		leaf = append(leaf, proofs...)
-		leaves = append(leaves, leaf)
+		// Canonical leaf encoding with length prefixes (must match board.EncodeLeaf)
+		var buf bytes.Buffer
+		idBytes := []byte(ballotID)
+		binary.Write(&buf, binary.BigEndian, uint32(len(idBytes)))
+		buf.Write(idBytes)
+		binary.Write(&buf, binary.BigEndian, uint32(len(encBallot)))
+		buf.Write(encBallot)
+		binary.Write(&buf, binary.BigEndian, uint32(len(proofs)))
+		buf.Write(proofs)
+		leaves = append(leaves, buf.Bytes())
 	}
 	return leaves, rows.Err()
 }

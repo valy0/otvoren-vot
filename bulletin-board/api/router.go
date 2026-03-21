@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
 
 	"github.com/valy0/otvoren-vot/bulletin-board/board"
@@ -10,26 +11,32 @@ import (
 func NewRouter(b *board.Board, internalAPIKey string) http.Handler {
 	mux := http.NewServeMux()
 
-	// Public read endpoints
-	mux.HandleFunc("GET /api/v1/board", handleListBallots(b))
-	mux.HandleFunc("GET /api/v1/board/root", handleGetRoot(b))
-	mux.HandleFunc("GET /api/v1/board/{ballot_id}", handleGetBallot(b))
-	mux.HandleFunc("GET /api/v1/election", handleGetElection())
-
-	// Internal write endpoints
-	mux.HandleFunc("POST /internal/v1/ballots", requireAPIKey(internalAPIKey, handleSubmitBallot(b)))
-
-	// Health check
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	// Public read endpoints (with CORS)
+	publicMux := http.NewServeMux()
+	publicMux.HandleFunc("GET /api/v1/board", handleListBallots(b))
+	publicMux.HandleFunc("GET /api/v1/board/root", handleGetRoot(b))
+	publicMux.HandleFunc("GET /api/v1/board/{ballot_id}", handleGetBallot(b))
+	publicMux.HandleFunc("GET /api/v1/election", handleGetElection())
+	publicMux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	return withMiddleware(mux)
+	// Internal write endpoints (no CORS)
+	internalMux := http.NewServeMux()
+	internalMux.HandleFunc("POST /internal/v1/ballots", requireAPIKey(internalAPIKey, handleSubmitBallot(b)))
+
+	// Combine: public gets CORS + logging, internal gets logging only
+	mux.Handle("/api/", withCORS(withLogging(publicMux)))
+	mux.Handle("/health", withCORS(withLogging(publicMux)))
+	mux.Handle("/internal/", withLogging(internalMux))
+
+	return mux
 }
 
 func requireAPIKey(key string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Internal-Key") != key {
+		provided := r.Header.Get("X-Internal-Key")
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(key)) != 1 {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid or missing API key")
 			return
 		}

@@ -1,10 +1,13 @@
 package board
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
@@ -18,10 +21,17 @@ var (
 
 // Board manages the bulletin board state.
 type Board struct {
-	store  *store.Store
-	tree   *merkle.Tree
-	mu     sync.Mutex
-	sealed bool
+	store      *store.Store
+	tree       *merkle.Tree
+	mu         sync.Mutex
+	sealed     bool
+	validateFn func(encryptedBallot, zkProofs json.RawMessage) error // nil = skip validation
+}
+
+// SetValidator sets the proof validation function.
+// When set, AppendBallot will reject ballots that fail validation.
+func (b *Board) SetValidator(fn func(encryptedBallot, zkProofs json.RawMessage) error) {
+	b.validateFn = fn
 }
 
 // New creates a Board. It rebuilds the Merkle tree from existing data.
@@ -64,6 +74,13 @@ func (b *Board) AppendBallot(ctx context.Context, ballotID string, encryptedBall
 		return nil, ErrDuplicateBallot
 	}
 
+	// Validate ZK proofs if validator is set
+	if b.validateFn != nil {
+		if err := b.validateFn(encryptedBallot, zkProofs); err != nil {
+			return nil, fmt.Errorf("proof validation failed: %w", err)
+		}
+	}
+
 	// Get next position
 	maxPos, err := b.store.GetMaxPosition(ctx)
 	if err != nil {
@@ -71,9 +88,8 @@ func (b *Board) AppendBallot(ctx context.Context, ballotID string, encryptedBall
 	}
 	position := maxPos + 1
 
-	// Compute leaf data and append to Merkle tree
-	leafData := append([]byte(ballotID), encryptedBallot...)
-	leafData = append(leafData, zkProofs...)
+	// Canonical leaf encoding with length prefixes
+	leafData := EncodeLeaf(ballotID, encryptedBallot, zkProofs)
 	b.tree.Append(leafData)
 
 	root := hex.EncodeToString(b.tree.Root())
@@ -155,3 +171,17 @@ func (b *Board) MerkleTree() *merkle.Tree {
 
 // Store returns the underlying store for read operations.
 func (b *Board) Store() *store.Store { return b.store }
+
+// EncodeLeaf produces canonical leaf encoding with length prefixes.
+// This must match the encoding used in store.GetAllLeafData for tree rebuilds.
+func EncodeLeaf(ballotID string, encryptedBallot, zkProofs json.RawMessage) []byte {
+	var buf bytes.Buffer
+	idBytes := []byte(ballotID)
+	binary.Write(&buf, binary.BigEndian, uint32(len(idBytes)))
+	buf.Write(idBytes)
+	binary.Write(&buf, binary.BigEndian, uint32(len(encryptedBallot)))
+	buf.Write(encryptedBallot)
+	binary.Write(&buf, binary.BigEndian, uint32(len(zkProofs)))
+	buf.Write(zkProofs)
+	return buf.Bytes()
+}
