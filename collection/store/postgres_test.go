@@ -4,11 +4,15 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/valy0/otvoren-vot/collection/store"
+	"github.com/valy0/otvoren-vot/collection/votermap"
 )
 
 const testElectionID = "550e8400-e29b-41d4-a716-446655440000"
+
+var testHistoryKey = []byte("test-history-key")
 
 func testDatabaseURL() string {
 	if url := os.Getenv("TEST_DATABASE_URL"); url != "" {
@@ -21,7 +25,7 @@ func setupStore(t *testing.T) *store.PostgresStore {
 	t.Helper()
 	ctx := context.Background()
 
-	s, err := store.New(ctx, testDatabaseURL(), testElectionID)
+	s, err := store.New(ctx, testDatabaseURL(), testElectionID, testHistoryKey)
 	if err != nil {
 		t.Skipf("PostgreSQL not available: %v", err)
 	}
@@ -41,7 +45,7 @@ func TestPostgresStore(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("RecordNew", func(t *testing.T) {
-		prev, err := s.Record(ctx, "hash-alice", "ballot-1", "online", 1700000000)
+		prev, err := s.Record(ctx, "hash-alice", "ballot-1", votermap.ChannelOnline, time.Unix(1700000000, 0))
 		if err != nil {
 			t.Fatalf("Record: %v", err)
 		}
@@ -52,13 +56,13 @@ func TestPostgresStore(t *testing.T) {
 
 	t.Run("RecordOverride", func(t *testing.T) {
 		// First vote.
-		_, err := s.Record(ctx, "hash-bob", "ballot-a", "online", 1700000000)
+		_, err := s.Record(ctx, "hash-bob", "ballot-a", votermap.ChannelOnline, time.Unix(1700000000, 0))
 		if err != nil {
 			t.Fatalf("Record first: %v", err)
 		}
 
 		// Override vote.
-		prev, err := s.Record(ctx, "hash-bob", "ballot-b", "in_person", 1700001000)
+		prev, err := s.Record(ctx, "hash-bob", "ballot-b", votermap.ChannelInPerson, time.Unix(1700001000, 0))
 		if err != nil {
 			t.Fatalf("Record override: %v", err)
 		}
@@ -68,7 +72,7 @@ func TestPostgresStore(t *testing.T) {
 	})
 
 	t.Run("GetActiveBallotID", func(t *testing.T) {
-		_, err := s.Record(ctx, "hash-carol", "ballot-c", "online", 1700000000)
+		_, err := s.Record(ctx, "hash-carol", "ballot-c", votermap.ChannelOnline, time.Unix(1700000000, 0))
 		if err != nil {
 			t.Fatalf("Record: %v", err)
 		}
@@ -99,10 +103,10 @@ func TestPostgresStore(t *testing.T) {
 		s.Pool().Exec(ctx, "TRUNCATE voters")
 
 		// Record 3 voters; override one.
-		s.Record(ctx, "hash-1", "b-1", "online", 1700000000)
-		s.Record(ctx, "hash-2", "b-2", "online", 1700000000)
-		s.Record(ctx, "hash-3", "b-3", "in_person", 1700000000)
-		s.Record(ctx, "hash-1", "b-1-new", "in_person", 1700001000) // override
+		s.Record(ctx, "hash-1", "b-1", votermap.ChannelOnline, time.Unix(1700000000, 0))
+		s.Record(ctx, "hash-2", "b-2", votermap.ChannelOnline, time.Unix(1700000000, 0))
+		s.Record(ctx, "hash-3", "b-3", votermap.ChannelInPerson, time.Unix(1700000000, 0))
+		s.Record(ctx, "hash-1", "b-1-new", votermap.ChannelInPerson, time.Unix(1700001000, 0)) // override
 
 		ids, err := s.ActiveSet(ctx)
 		if err != nil {
@@ -128,9 +132,9 @@ func TestPostgresStore(t *testing.T) {
 	t.Run("Size", func(t *testing.T) {
 		s.Pool().Exec(ctx, "TRUNCATE voters")
 
-		s.Record(ctx, "hash-x", "bx", "online", 1700000000)
-		s.Record(ctx, "hash-y", "by", "online", 1700000000)
-		s.Record(ctx, "hash-x", "bx2", "in_person", 1700001000) // override, not a new voter
+		s.Record(ctx, "hash-x", "bx", votermap.ChannelOnline, time.Unix(1700000000, 0))
+		s.Record(ctx, "hash-y", "by", votermap.ChannelOnline, time.Unix(1700000000, 0))
+		s.Record(ctx, "hash-x", "bx2", votermap.ChannelInPerson, time.Unix(1700001000, 0)) // override, not a new voter
 
 		size, err := s.Size(ctx)
 		if err != nil {
@@ -144,7 +148,7 @@ func TestPostgresStore(t *testing.T) {
 	t.Run("HasVoted", func(t *testing.T) {
 		s.Pool().Exec(ctx, "TRUNCATE voters")
 
-		s.Record(ctx, "hash-voter", "bv", "online", 1700000000)
+		s.Record(ctx, "hash-voter", "bv", votermap.ChannelOnline, time.Unix(1700000000, 0))
 
 		voted, err := s.HasVoted(ctx, "hash-voter")
 		if err != nil {

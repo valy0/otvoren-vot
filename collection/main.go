@@ -37,9 +37,13 @@ func main() {
 		log.Println("WARNING: No EGN_HMAC_KEY set, using empty key (development only)")
 	}
 
+	if cfg.DatabaseURL != "" && cfg.HistoryHMACKey == "" {
+		log.Fatal("HISTORY_HMAC_KEY must be set when using PostgreSQL (required for vote history integrity)")
+	}
+
 	var voterStore votermap.Store
 	if cfg.DatabaseURL != "" {
-		pgStore, err := store.New(ctx, cfg.DatabaseURL, cfg.ElectionID)
+		pgStore, err := store.New(ctx, cfg.DatabaseURL, cfg.ElectionID, []byte(cfg.HistoryHMACKey))
 		if err != nil {
 			log.Fatalf("Failed to connect to database: %v", err)
 		}
@@ -51,7 +55,7 @@ func main() {
 		log.Printf("Using PostgreSQL store (election %s)", cfg.ElectionID)
 	} else {
 		log.Println("WARNING: No DATABASE_URL set, using in-memory store (data will not persist across restarts)")
-		voterStore = votermap.NewMemoryStore()
+		voterStore = votermap.NewMemoryStore([]byte(cfg.HistoryHMACKey))
 	}
 
 	handler := NewCollectionHandler(voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey)

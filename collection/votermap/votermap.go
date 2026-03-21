@@ -13,7 +13,7 @@ import (
 // Store is the interface for voter ballot tracking.
 // Implementations must be safe for concurrent use.
 type Store interface {
-	Record(ctx context.Context, egnHash, ballotID, channel string, timestamp int64) (prevBallotID string, err error)
+	Record(ctx context.Context, egnHash, ballotID string, channel Channel, submittedAt time.Time) (prevBallotID string, err error)
 	GetActiveBallotID(ctx context.Context, egnHash string) (string, bool, error)
 	ActiveSet(ctx context.Context) ([]string, error)
 	Size(ctx context.Context) (int, error)
@@ -78,22 +78,28 @@ func ComputeRowHash(key []byte, prevHash, egnHash, ballotID string, seq int) str
 
 // MemoryStore is an in-memory Store implementation for testing and development.
 type MemoryStore struct {
-	mu      sync.RWMutex
-	mapping map[string]entry // egnHash -> entry
+	mu             sync.RWMutex
+	mapping        map[string]entry
+	history        map[string][]HistoryEntry
+	historyHMACKey []byte
 }
 
 type entry struct {
-	BallotID  string
-	Channel   string // "online" or "in_person"
-	Timestamp int64  // unix timestamp
+	BallotID    string
+	Channel     Channel
+	SubmittedAt time.Time
 }
 
 // NewMemoryStore creates an empty in-memory Store.
-func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{mapping: make(map[string]entry)}
+func NewMemoryStore(historyHMACKey []byte) *MemoryStore {
+	return &MemoryStore{
+		mapping:        make(map[string]entry),
+		history:        make(map[string][]HistoryEntry),
+		historyHMACKey: historyHMACKey,
+	}
 }
 
-func (ms *MemoryStore) Record(_ context.Context, egnHash, ballotID, channel string, timestamp int64) (string, error) {
+func (ms *MemoryStore) Record(_ context.Context, egnHash, ballotID string, channel Channel, submittedAt time.Time) (string, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -102,11 +108,61 @@ func (ms *MemoryStore) Record(_ context.Context, egnHash, ballotID, channel stri
 		prev = existing.BallotID
 	}
 	ms.mapping[egnHash] = entry{
-		BallotID:  ballotID,
-		Channel:   channel,
-		Timestamp: timestamp,
+		BallotID:    ballotID,
+		Channel:     channel,
+		SubmittedAt: submittedAt,
 	}
+
+	// Append to history
+	prevHash := ""
+	entries := ms.history[egnHash]
+	if len(entries) > 0 {
+		prevHash = entries[len(entries)-1].RowHash
+	}
+	nextSeq := len(entries) + 1
+	rowHash := ComputeRowHash(ms.historyHMACKey, prevHash, egnHash, ballotID, nextSeq)
+	ms.history[egnHash] = append(entries, HistoryEntry{
+		BallotID:    ballotID,
+		Channel:     channel,
+		SubmittedAt: submittedAt,
+		Seq:         nextSeq,
+		RowHash:     rowHash,
+	})
+
 	return prev, nil
+}
+
+// GetOverrideHistory returns the full submission history for a voter.
+func (ms *MemoryStore) GetOverrideHistory(_ context.Context, egnHash string) ([]HistoryEntry, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	entries := ms.history[egnHash]
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	result := make([]HistoryEntry, len(entries))
+	copy(result, entries)
+	return result, nil
+}
+
+// GetAllOverrideChains iterates over all voters with >= 2 submissions (overrides).
+func (ms *MemoryStore) GetAllOverrideChains(_ context.Context, fn func(OverrideChain) error) error {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	for egnHash, entries := range ms.history {
+		if len(entries) < 2 {
+			continue
+		}
+		chain := OverrideChain{
+			EgnHash:     egnHash,
+			Submissions: make([]HistoryEntry, len(entries)),
+		}
+		copy(chain.Submissions, entries)
+		if err := fn(chain); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ms *MemoryStore) GetActiveBallotID(_ context.Context, egnHash string) (string, bool, error) {

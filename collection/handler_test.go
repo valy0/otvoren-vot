@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/valy0/otvoren-vot/collection/votermap"
 )
 
-var testHMACKey = []byte("test-hmac-key")
+var (
+	testHMACKey    = []byte("test-hmac-key")
+	testHistoryKey = []byte("test-history-key")
+)
 
 func TestSubmitBallot(t *testing.T) {
 	// Mock bulletin board
@@ -23,7 +27,7 @@ func TestSubmitBallot(t *testing.T) {
 	}))
 	defer bb.Close()
 
-	vm := votermap.NewMemoryStore()
+	vm := votermap.NewMemoryStore(testHistoryKey)
 	h := NewCollectionHandler(vm, testHMACKey, bb.URL, "test-key", "active-key")
 
 	body := `{"ballot_id":"b1","encrypted_ballot":{},"zk_proofs":{}}`
@@ -58,7 +62,7 @@ func TestSubmitOverride(t *testing.T) {
 	}))
 	defer bb.Close()
 
-	vm := votermap.NewMemoryStore()
+	vm := votermap.NewMemoryStore(testHistoryKey)
 	h := NewCollectionHandler(vm, testHMACKey, bb.URL, "test-key", "active-key")
 
 	// First vote
@@ -86,7 +90,7 @@ func TestSubmitOverride(t *testing.T) {
 }
 
 func TestSubmitMissingIdentity(t *testing.T) {
-	vm := votermap.NewMemoryStore()
+	vm := votermap.NewMemoryStore(testHistoryKey)
 	h := NewCollectionHandler(vm, testHMACKey, "http://unused", "key", "active-key")
 
 	req := httptest.NewRequest("POST", "/submit", bytes.NewBufferString(`{"ballot_id":"b1","encrypted_ballot":{},"zk_proofs":{}}`))
@@ -100,7 +104,7 @@ func TestSubmitMissingIdentity(t *testing.T) {
 }
 
 func TestSubmitInvalidEGN(t *testing.T) {
-	vm := votermap.NewMemoryStore()
+	vm := votermap.NewMemoryStore(testHistoryKey)
 	h := NewCollectionHandler(vm, testHMACKey, "http://unused", "key", "active-key")
 
 	cases := []struct {
@@ -125,8 +129,8 @@ func TestSubmitInvalidEGN(t *testing.T) {
 }
 
 func TestRequireKey(t *testing.T) {
-	vm := votermap.NewMemoryStore()
-	vm.Record(context.Background(), votermap.HashEGN("1111111111", testHMACKey), "b1", "online", 1000)
+	vm := votermap.NewMemoryStore(testHistoryKey)
+	vm.Record(context.Background(), votermap.HashEGN("1111111111", testHMACKey), "b1", votermap.ChannelOnline, time.Unix(1000, 0))
 
 	h := NewCollectionHandler(vm, testHMACKey, "http://unused", "key", "secret-active-key")
 	protected := requireKey("secret-active-key", h.HandleActiveSet)
@@ -159,9 +163,9 @@ func TestRequireKey(t *testing.T) {
 }
 
 func TestActiveSet(t *testing.T) {
-	vm := votermap.NewMemoryStore()
-	vm.Record(context.Background(), votermap.HashEGN("1111111111", testHMACKey), "b1", "online", 1000)
-	vm.Record(context.Background(), votermap.HashEGN("2222222222", testHMACKey), "b2", "online", 1000)
+	vm := votermap.NewMemoryStore(testHistoryKey)
+	vm.Record(context.Background(), votermap.HashEGN("1111111111", testHMACKey), "b1", votermap.ChannelOnline, time.Unix(1000, 0))
+	vm.Record(context.Background(), votermap.HashEGN("2222222222", testHMACKey), "b2", votermap.ChannelOnline, time.Unix(1000, 0))
 
 	h := NewCollectionHandler(vm, testHMACKey, "http://unused", "key", "active-key")
 	req := httptest.NewRequest("GET", "/active-set", nil)

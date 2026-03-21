@@ -76,7 +76,7 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Record in voter map (handles override)
-	prevBallotID, err := h.voterStore.Record(r.Context(), egnHash, req.BallotID, "online", time.Now().Unix())
+	prevBallotID, err := h.voterStore.Record(r.Context(), egnHash, req.BallotID, votermap.ChannelOnline, time.Now())
 	if err != nil {
 		log.Printf("ERROR: failed to record vote: %v", err)
 		writeError(w, http.StatusInternalServerError, "store_error", "Failed to record vote")

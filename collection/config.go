@@ -9,6 +9,7 @@ type Config struct {
 	DatabaseURL      string
 	ElectionID       string
 	EGNHMACKey       string
+	HistoryHMACKey   string
 }
 
 func LoadConfig() *Config {
@@ -19,6 +20,7 @@ func LoadConfig() *Config {
 		DatabaseURL:      envOr("DATABASE_URL", ""),
 		ElectionID:       envOr("ELECTION_ID", "00000000-0000-0000-0000-000000000000"),
 		EGNHMACKey:       envOr("EGN_HMAC_KEY", ""),
+		HistoryHMACKey:   envOr("HISTORY_HMAC_KEY", ""),
 	}
 }
 
