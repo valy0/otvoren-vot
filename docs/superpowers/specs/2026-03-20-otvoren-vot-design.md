@@ -43,7 +43,7 @@ The project includes both the software implementation and non-code deliverables 
 
 Pre-election, the 9 trustees run a Distributed Key Generation (DKG) protocol using Feldman's Verifiable Secret Sharing:
 
-- Each trustee's HSM (FIPS 140-3 Level 3) generates a private key share internally
+- Each trustee's HSM — a USB-sized hardware security module (e.g., YubiHSM 2, Nitrokey HSM 2), FIPS 140-3 Level 3 — generates a private key share internally
 - The shares are never combined — the full private key never exists anywhere
 - The protocol produces a single **election public key** for ballot encryption
 - Threshold: any 5-of-9 trustees can collectively decrypt; fewer than 5 learn nothing
@@ -168,7 +168,7 @@ This preserves the two-layer separation: Layer 2 knows "this is a valid session"
 - **Auth Service** (Go) — eAuth 2.0 integration via abstracted interface. Ships with a mock eAuth provider for development/testing. Production integration documented.
 - **Collection Server** (Go) — receives encrypted ballots from authenticated voters. Records `ЕГН → ballot_id` mapping. Strips voter identity before forwarding to Layer 2.
 
-**Knows:** Who voted (ЕГН), when, which ballot ID, device attestation hash.
+**Knows:** Who voted (ЕГН), when, which ballot ID.
 **Never sees:** Ballot content (encrypted or plaintext), party/candidate choice.
 
 ### 3.2 Layer 2 — Ballot Service
@@ -186,7 +186,7 @@ This preserves the two-layer separation: Layer 2 knows "this is a valid session"
 1. Voter authenticates with Layer 1, receives session token
 2. Browser encrypts ballot, generates random `ballot_id`
 3. Browser sends `{ballot_id, encrypted_ballot, proofs}` to Collection Server
-4. Collection Server verifies: authenticated, within vote limits, device policy passes
+4. Collection Server verifies: authenticated, election is open
 5. Collection Server records `ЕГН → ballot_id` in its private database
 6. Collection Server forwards `{ballot_id, encrypted_ballot, proofs}` to Bulletin Board — **no ЕГН, no session token, no IP address**
 7. Bulletin Board validates proofs, appends to Merkle tree, returns new Merkle root
@@ -260,20 +260,19 @@ The bulletin board's "append-only" property is enforced at the application layer
 | `recommended` | Warning displayed, voter can proceed without extension |
 | `disabled` | No extension check (for testing/fallback) |
 
-### 4.5 Device Reuse Policy
-
-- At submission, browser generates a device attestation using a per-election cookie set during the first voting session from that browser profile. This is NOT browser fingerprinting (which is unreliable and privacy-invasive). The cookie is a random 256-bit value generated on first vote and sent with subsequent submissions. It is scoped to the browser profile, not the hardware.
-- Layer 1 checks: has this cookie been associated with a different ЕГН in this election?
-- Same person re-voting from same device: allowed (override mechanism — same ЕГН, same cookie is fine)
-- Configurable: `strict` (reject) / `warn` (proceed with warning) / `disabled`
-- Edge cases: shared family computer — different browser profiles have different cookies. Incognito/private mode has no cookie — treated as a new device. Public terminals can be exempted by CIK configuration.
-
-### 4.6 Error Handling
+### 4.5 Error Handling
 
 - Network failure during submission → queued in `sessionStorage` (cleared on tab close, NOT `localStorage`). Retry occurs only within the same browser session. If the tab is closed, the voter must re-authenticate and re-vote (safe due to override mechanism). No auth tokens are persisted. No encrypted ballots survive the session.
 - eAuth timeout → re-authenticate, no data lost
 - Proof validation failure → Collection Server returns error, browser re-encrypts with fresh randomness
 - Election closed → hard rejection, directed to nearest polling station
+
+### 4.6 Web Security
+
+- **DNSSEC:** `izbori.bg` domain uses DNSSEC to prevent DNS hijacking/spoofing. Voters are directed to the authentic server.
+- **Certificate pinning:** The browser extension pins the expected TLS certificate for `izbori.bg`. If the certificate doesn't match (indicating a MITM or DNS hijack), the extension blocks the page and warns the voter. This is an additional benefit of making the extension mandatory.
+- **HSTS:** Strict Transport Security header with long max-age, preventing downgrade to HTTP.
+- **Content Security Policy:** Strict CSP preventing inline scripts and unauthorized resource loading, mitigating XSS attacks on the voting page.
 
 ---
 
@@ -283,8 +282,10 @@ The bulletin board's "append-only" property is enforced at the application layer
 
 - Embedded Linux (hardened, read-only root filesystem)
 - Go application — full-screen kiosk mode, no window manager, no shell access
+- **TPM-based software attestation:** at every boot, the TPM verifies the software image hash against a signed reference hash. If the hash doesn't match, the machine refuses to start and displays an error for the commission. This is the trust anchor — it guarantees the running software is unmodified.
 - Offline-first: all crypto and ballot storage works without network
 - Local storage: SQLite for encrypted ballot queue
+- No printer, no paper, no moving mechanical parts. The machine is a touchscreen + TPM + network interface.
 
 ### 5.2 Voter Flow
 
@@ -293,25 +294,24 @@ The bulletin board's "append-only" property is enforced at the application layer
 3. Party selection screen: large touch targets, party logos and names in Cyrillic
 4. Select party
 5. Optional: candidate preference screen
-6. Review screen
-7. Paper ballot prints behind one-way tinted glass — voter reads through glass
-8. Paper displayed 5 seconds, physical shutter covers it
-9. Green button (confirm) or red button (redo → back to step 3)
-10. On confirm: machine encrypts ballot, generates ZK proofs, assigns random ballot_id
-11. Encrypted ballot queued to local SQLite
-12. Paper drops into sealed ballot box
-13. Take-home receipt printed: ballot ID + QR code for verification portal
-14. Machine resets for next voter
+6. Review screen: "Вие избрахте: [party] / [candidate]"
+7. Voter presses green button (confirm) or red button (redo → back to step 3)
+8. On confirm: machine encrypts ballot, generates ZK proofs, assigns random ballot_id
+9. Encrypted ballot queued to local SQLite
+10. Confirmation screen shows ballot ID (voter can photograph or note it for post-election inclusion verification on `verify.izbori.bg`)
+11. Machine resets for next voter
+
+**No paper ballot, no printer.** The machine's integrity is guaranteed by TPM attestation at boot — the software is verified to be unmodified. This is fundamentally different from a voter's browser (which runs arbitrary extensions and software). Compromising the machine requires physical tampering that would break tamper-evident seals, be caught on camera, and break the TPM hash chain. The machine is a trusted device; the voter's browser is not.
 
 ### 5.3 Identity Binding (In-Person)
 
-- Commission checks voter ID manually (existing Bulgarian practice)
-- Commission marks voter in electoral roll (paper or tablet)
+- Commission verifies voter identity using their ID card (лична карта) — existing Bulgarian practice
+- Commission marks voter in electoral roll via tablet
 - Machine does NOT authenticate the voter — doesn't know who is using it
 
 **Machine-tablet pairing protocol:**
-1. Before the voter approaches, the commission member taps "Next Voter" on their tablet, entering the voter's ЕГН
-2. Tablet generates a 6-digit session code and displays it to the commission member
+1. Before the voter approaches, the commission member scans the voter's лична карта MRZ (Machine Readable Zone) using a USB MRZ reader attached to the commission tablet. The MRZ contains the ЕГН, name, document number, and check digits. This eliminates manual entry errors and speeds up the queue. Fallback: manual ЕГН entry on the tablet if the MRZ reader fails or the document is damaged.
+2. Tablet validates MRZ check digits, extracts ЕГН, generates a 6-digit session code and displays it to the commission member
 3. Commission member enters the session code on the voting machine's keypad (separate from the voter-facing touchscreen — this is a commission-only input on the side/back of the machine)
 4. Machine displays "Ready" on the voter-facing screen. The session code is stored locally, associated with the next ballot_id generated.
 5. Voter uses the machine normally. On confirmation, the machine generates ballot_id and pairs it with the session code.
@@ -335,26 +335,124 @@ This ensures: (a) the machine never knows the ЕГН (only the session code), (b
 - **Collection Server validation:** Verifies station key signature, validates station ID is registered, checks sequence number is strictly greater than the last received for that station, rejects duplicate batches.
 - **Chain of custody:** Two commission members must jointly authorize the USB export (two physical buttons pressed simultaneously). The export is logged with timestamp and sequence number.
 
-### 5.5 Hardware Requirements Specification (Document)
+### 5.5 PKI & Certificate Authority
+
+**CA Hierarchy:**
+- **Offline Root CA** → **Online Intermediate CA** → **End-entity certificates** (machines, services)
+
+**Root CA Key Ceremony:**
+- Performed on an air-gapped, hardened workstation in a physically secure room (access-controlled, no windows, RF-shielded)
+- Root private key generated inside a FIPS 140-3 Level 3 HSM under **M-of-N split knowledge**: 3-of-5 key custodians, each holding a key component. No single custodian can activate the root key alone.
+- **Key custodian requirements:** Custodians must be independent individuals from different institutions (e.g., drawn from the trustee pool). Each custodian undergoes a background check (criminal record, financial standing) before appointment. No two custodians may be from the same organization, related by family, or have a reporting relationship. Custodian identities are documented in the CP/CPS.
+- Formal ceremony script followed step-by-step. Independent witnesses present (minimum 2, from different trustee institutions).
+- Full video recording of the ceremony. Signed audit log produced by each participant.
+- Root CA signs a single intermediate CA certificate, then the HSM is powered down.
+- HSM stored in a tamper-evident bag, placed in a dual-lock safe (two different custodians hold the keys). Access log maintained — every safe opening recorded with date, time, custodian identities, and purpose.
+
+**Online Intermediate CA:**
+- Runs on dedicated infrastructure within the Collection Server environment
+- Private key in an HSM (can be a separate device or a partition on the Collection Server's HSM)
+- Validity period: election period + 30 days
+- Signs machine certificates and service certificates
+- If compromised: root CA custodians convene, open the safe, revoke the intermediate, and issue a new one
+
+**Machine Certificate Issuance:**
+1. Pre-election setup event at a central CIK facility (weeks before election day)
+2. Each machine generates a key pair in its TPM — private key never leaves the chip
+3. Machine produces a CSR (Certificate Signing Request)
+4. CIK operator verifies the machine's serial number and station assignment
+5. Second CIK operator approves (two-person rule)
+6. Intermediate CA signs the CSR. Certificate contains: machine serial number, assigned station ID, constituency, validity period (election day ± 3 days)
+7. Certificate installed on the machine
+8. Machine also receives the full CA chain (root + intermediate) to verify the Collection Server
+
+**Service Certificates:**
+- Collection Server, Bulletin Board, Verification Service, and internal services also receive certificates from the intermediate CA
+- Enables mTLS everywhere — all service-to-service communication is mutually authenticated
+
+**Certificate Revocation:**
+- CRL (Certificate Revocation List) published by the intermediate CA, refreshed hourly
+- If a machine is stolen or compromised, its certificate is revoked
+- Collection Server checks CRL on every connection (cached, small list)
+
+**Key Destruction:**
+- After election results are certified and legal challenge periods expire, the intermediate CA key is destroyed (HSM wiped, witnessed, logged)
+- Root CA key is destroyed in a formal ceremony mirroring the generation ceremony: custodians convene, open the safe, wipe the HSM on camera, signed destruction audit log produced
+- All machine TPMs are reset during post-election decommissioning
+
+**Certificate Policy (CP) and Certification Practice Statement (CPS):**
+- Formal documents defining the CA's operational procedures, roles, responsibilities, and security controls
+- Included in the CIK deliverables (docs/cik/pki/)
+- Modeled on PCI PIN Security Requirements Annex A (Certificate Authority requirements)
+
+### 5.6 Machine Network Connectivity
+
+- Machines connect to the Collection Server over the public internet using **mTLS** (mutual TLS)
+- Machine authenticates with its client certificate (Section 5.5); Collection Server authenticates with its service certificate
+- No VPN required — mTLS provides equivalent authentication + encryption without the operational complexity of managing 12,000 VPN tunnels
+- If the network drops: machine queues ballots locally, retries automatically when connectivity returns
+- If the network never comes up: USB sync fallback (Section 5.4)
+- DNS: machines are pre-configured with the Collection Server's IP addresses (no DNS dependency on election day)
+
+### 5.7 Hardware Requirements Specification (Document)
 
 Published spec covering:
 - CPU/RAM/storage minimums
-- Touchscreen: 15-17", resolution, brightness
-- Thermal printer: paper width, DPI, speed
-- Privacy glass: polarization angle, viewing angle, tint level
-- Physical buttons: GPIO or USB HID interface
-- Shutter mechanism
-- Tamper-evident enclosure
+- TPM 2.0 requirements (attestation, key storage)
+- Touchscreen: 15-17", resolution, brightness, viewing angle (privacy filter to prevent side-viewing)
+- Physical confirm/cancel buttons: GPIO or USB HID interface
+- Commission-side keypad for session code entry
+- MRZ reader (USB, for commission tablet)
+- Tamper-evident enclosure with sealed ports
 - Battery backup: 30 min minimum
 - Environmental: temperature, humidity for Bulgarian conditions
+- Network interface: Ethernet and/or WiFi
 
-### 5.6 Anti-Photography Measures (In Hardware Spec)
+### 5.8 Machine Audit Logs
 
-- Polarized privacy filter: 60° viewing angle, opaque from sides
-- One-way tinted glass over printer area
-- Screen brightness calibrated to wash out in photos
-- Physical shutter covers paper after 5 seconds
-- No audio output of vote content
+Every machine maintains a tamper-evident local audit log. The log records events, never vote content.
+
+**Logged events:**
+- Boot, self-test results, software hash verification
+- Session start (session code entered by commission)
+- Vote cast (timestamp + ballot_id only — never party/candidate selection)
+- Voter confirmed/cancelled
+- Encryption and proof generation completed
+- Network sync: connection established, ballots transmitted, acknowledgement received
+- USB export: initiated, batch sequence number, two-person authorization
+- Errors: hardware failures, network timeouts, proof validation failures, TPM attestation results
+- Shutdown, sleep, power events (battery switchover, power restore)
+
+**Tamper-evidence:**
+- Each log entry is hash-chained: `entry_hash = SHA-256(previous_hash + entry_data + timestamp)`
+- The chain is anchored to the machine's TPM — the first entry's hash is signed by the TPM at boot
+- If any log entry is modified or deleted, the chain breaks and post-election audit detects it
+
+**Export:**
+- Logs are exported alongside ballot batches (both network sync and USB)
+- Logs are also independently exportable for audit without ballot data
+- Post-election: all machine logs are collected centrally. On collection, the central server validates the full hash chain against the TPM anchor signature. Any broken chain is flagged immediately — that machine's ballots are quarantined pending investigation. Validated logs are archived with the election data.
+
+### 5.9 Polling Station Cameras
+
+Bulgarian polling stations are already required by law to have video surveillance. The spec defines integration requirements for the voting machine environment:
+
+**Privacy constraints:**
+- Cameras must NOT have line of sight to the machine's voter-facing screen
+- Camera placement is documented in the hardware requirements spec with a recommended room layout diagram
+
+**What cameras should capture:**
+- The overall polling station environment: entrance, commission table, machine area (from behind/side)
+- The machine's physical integrity: no unauthorized access to ports, no tampering with seals
+- Commission procedures: MRZ scanning, session code entry
+
+**Recording:**
+- Continuous recording during polling hours
+- Footage stored locally at the polling station on a dedicated recording device (not on the voting machine)
+- Footage archived for the legal challenge period (minimum 6 months)
+- Access to footage requires judicial order or CIK administrative decision
+
+**Note:** Camera hardware and recording infrastructure are outside the scope of our software. The spec defines placement constraints and integration requirements only.
 
 ---
 
@@ -381,7 +479,7 @@ Published spec covering:
 - Individual votes are never decrypted
 - Vote buying becomes economically irrational at scale
 
-**Receipt threat analysis:** The take-home receipt from the voting machine contains a ballot ID that can be verified on the portal. A coercer could demand the receipt. However: (a) the receipt proves inclusion only, never content — the coercer cannot learn what was voted; (b) a "vote for us or don't vote" coercion strategy is defeated by the fact that the voter can claim they voted in person and then overrode online; (c) the voter can discard the receipt before leaving the polling station (it is optional to take). The receipt is a transparency tool, not a proof of vote content.
+**Ballot ID coercion analysis:** The voter can note their ballot ID from the confirmation screen. A coercer could demand this ID. However: (a) the ballot ID proves inclusion only, never content — the coercer cannot learn what was voted; (b) a "vote for us or don't vote" coercion strategy is defeated by the fact that the voter can override online later; (c) the voter can simply not note the ballot ID — there is no physical receipt to demand. The ballot ID is a voluntary transparency tool, not a proof of vote content.
 
 ### 6.3 Deduplication Protocol (After Polls Close)
 
@@ -470,7 +568,7 @@ Published spec covering:
 
 **Level 1 — Immediate (during voting):**
 - Online: Merkle inclusion proof + ballot ID + extension return code verification
-- In-person: screen confirmation + paper ballot behind glass + take-home receipt
+- In-person: screen confirmation + ballot ID displayed (voter can note it voluntarily). Machine integrity guaranteed by TPM attestation.
 
 **Level 2 — Individual (post-election):**
 - Voter visits `verify.izbori.bg`
@@ -575,7 +673,8 @@ otvoren-vot verify all        — run everything, output pass/fail report
 **Graceful degradation:**
 - If online voting is overwhelmed: queue submissions, show estimated wait time
 - If online voting is fully down: in-person voting continues unaffected at all polling stations
-- The digital system improves the process; paper is always the safety net
+- Machine failure at a station: polling stations are required to have 2+ machines. If one fails, voters use the remaining machine(s). If all machines at a station fail, voters are directed to the nearest functioning station.
+- There are no paper ballots in this system. The cryptographic tally is the count. Manual counting is eliminated entirely.
 
 ---
 
@@ -623,6 +722,10 @@ Pre-election code audit (2 firms, 3-6 months), penetration testing, formal verif
 
 Common Criteria (Protection Profile, target EAL), FIPS 140-3 Level 3 (HSMs), EU eIDAS compliance, BSI Technical Guidelines reference, timeline (12-18 months).
 
+### 12.6 PKI Certificate Policy & Certification Practice Statement (Bulgarian)
+
+CP/CPS documents for the election PKI, modeled on PCI PIN Security Requirements Annex A. Covers: CA hierarchy, key ceremony procedures, certificate lifecycle, revocation procedures, physical security controls, audit requirements, roles and responsibilities.
+
 ---
 
 ## 13. Project Structure
@@ -650,6 +753,16 @@ otvoren-vot/
 └── specs/               # Design specs and decisions
 ```
 
+### Reproducible Builds
+
+All compiled artifacts (Go binaries, WASM bundles, browser extension package) use **deterministic/reproducible builds**: the same source code, build environment, and build instructions always produce bit-for-bit identical output.
+
+- **Why:** Without reproducible builds, there is no way to verify that the deployed binaries correspond to the audited source code. An auditor reviews the source but the deployed binary could contain different code.
+- **How:** Dockerized build environment with pinned base images, pinned compiler versions, pinned dependencies (Go modules, npm lockfile). Build output is hashed and the hash is published alongside the release.
+- **Verification:** Any party can clone the repo, run the build in the provided Docker container, and compare the output hash against the published hash. If they match, the binary is faithful to the source.
+- **Machine images:** The voting machine's embedded Linux image is also reproducibly built. The image hash is the reference hash stored in the TPM for boot attestation (Section 5.1). Auditors can independently rebuild the image and confirm the TPM is attesting to the audited software.
+- **Browser extension:** The extension package submitted to Chrome Web Store / Firefox Add-ons is reproducibly built. The published source hash in the repo matches the store-distributed package.
+
 ### Build Order
 
 Bottom-up: crypto primitives → bulletin board → tally → collection + auth → verification → web + dashboard + extension → machine → admin → deploy → docs
@@ -670,6 +783,7 @@ Bottom-up: crypto primitives → bulletin board → tally → collection + auth 
 | Browser extension | TypeScript | Chrome + Firefox Manifest V3 |
 | Election admin | Python FastAPI | CRUD + workflow, auto-generated API docs |
 | Machine software | Go on embedded Linux | Same crypto library as servers, single binary |
+| Build system | Reproducible/deterministic builds | Verifiable binary-to-source correspondence |
 | Containerization | Docker Compose | Dev/demo deployment |
 | Localization | Hardcoded Bulgarian strings (no i18n framework) | Single language, avoids framework overhead. If multi-language is ever needed, extract to resource files. |
 
@@ -690,7 +804,7 @@ Bottom-up: crypto primitives → bulletin board → tally → collection + auth 
 | SMS verification | Dropped | Extension is more secure, no telecom dependency |
 | Split-device voting | Dropped | Extension provides equivalent security without UX burden |
 | Extension policy default | Required for online voting | Configurable by CIK |
-| Device reuse | Configurable (strict/warn/disabled) | CIK sets policy per election |
+| Device reuse tracking | Removed | eAuth MFA is sufficient; cookie-based tracking adds complexity for minimal value |
 | Decryption ceremony | Truly live computation | Maximum public confidence |
 | Deployment | Docker Compose (dev/demo) | Production infra is CIK's responsibility |
 | Project structure | Vertical monorepo | Solo developer, single audit target |
