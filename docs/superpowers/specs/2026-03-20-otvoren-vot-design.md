@@ -692,7 +692,7 @@ otvoren-vot verify all        — run everything, output pass/fail report
 - Extra-large text mode with high contrast (activated via accessibility button on machine)
 - Audio guidance via headphone jack with physical NEXT/SELECT hardware buttons for blind voters
 - Touchscreen targets minimum 44×44px (WCAG touch target size)
-- Paper receipt includes both printed text and QR code (QR scannable by accessibility apps)
+- Ballot ID displayed in large, high-contrast text on confirmation screen
 
 **Browser extension:**
 - Extension popup is screen-reader accessible
