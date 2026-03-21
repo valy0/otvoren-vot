@@ -15,12 +15,22 @@ import (
 func main() {
 	cfg := LoadConfig()
 
+	apiKey := os.Getenv("BULLETIN_BOARD_API_KEY")
+	if apiKey == "" {
+		log.Fatal("BULLETIN_BOARD_API_KEY environment variable must be set")
+	}
+
+	activeSetKey := os.Getenv("ACTIVE_SET_API_KEY")
+	if activeSetKey == "" {
+		log.Fatal("ACTIVE_SET_API_KEY environment variable must be set")
+	}
+
 	vm := votermap.New()
-	handler := NewCollectionHandler(vm, cfg.BulletinBoardURL, "dev-key")
+	handler := NewCollectionHandler(vm, cfg.BulletinBoardURL, apiKey, activeSetKey)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/submit", handler.HandleSubmit)
-	mux.HandleFunc("GET /internal/v1/active-set", handler.HandleActiveSet)
+	mux.HandleFunc("GET /internal/v1/active-set", requireKey(activeSetKey, handler.HandleActiveSet))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok","voters":` + fmt.Sprintf("%d", vm.Size()) + `}`))

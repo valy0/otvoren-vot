@@ -10,7 +10,7 @@ type Config struct {
 func LoadConfig() *Config {
 	return &Config{
 		ListenAddr: envOr("LISTEN_ADDR", ":8082"),
-		MockMode:   os.Getenv("EAUTH_MOCK") != "false",
+		MockMode:   os.Getenv("EAUTH_MOCK") == "true", // explicit opt-in, not opt-out
 	}
 }
 

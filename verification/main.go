@@ -18,7 +18,11 @@ func main() {
 
 	sessions := session.NewStore()
 	// In production, this secret is threshold-distributed among verification trustees
-	verificationSecret := []byte("dev-verification-secret-key-32b!")
+	secretStr := os.Getenv("VERIFICATION_SECRET")
+	if secretStr == "" {
+		log.Fatal("VERIFICATION_SECRET environment variable must be set")
+	}
+	verificationSecret := []byte(secretStr)
 	parties := []string{"ГЕРБ", "ПП-ДБ", "ДПС", "БСП", "Възраждане"}
 
 	mux := http.NewServeMux()

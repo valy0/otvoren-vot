@@ -22,7 +22,7 @@ services:
     environment:
       DATABASE_URL: postgres://board:dev@postgres:5432/bulletin_board?sslmode=disable
       LISTEN_ADDR: ":8080"
-      INTERNAL_API_KEY: dev-key
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-key-change-in-production}
     ports:
       - "8080:8080"
     depends_on:
@@ -35,7 +35,7 @@ services:
       dockerfile: auth/Dockerfile
     environment:
       LISTEN_ADDR: ":8082"
-      EAUTH_MOCK: "true"
+      EAUTH_MOCK: "true"  # Set to "false" for production
     ports:
       - "8082:8082"
 
@@ -47,6 +47,8 @@ services:
       LISTEN_ADDR: ":8083"
       BULLETIN_BOARD_URL: http://bulletin-board:8080
       AUTH_SERVICE_URL: http://auth:8082
+      BULLETIN_BOARD_API_KEY: ${BULLETIN_BOARD_API_KEY:-dev-key-change-in-production}
+      ACTIVE_SET_API_KEY: ${ACTIVE_SET_API_KEY:-dev-active-key-change-in-production}
     ports:
       - "8083:8083"
     depends_on:
@@ -71,6 +73,7 @@ services:
       dockerfile: verification/Dockerfile
     environment:
       LISTEN_ADDR: ":8084"
+      VERIFICATION_SECRET: ${VERIFICATION_SECRET:-dev-secret-change-in-production-32b}
     ports:
       - "8084:8084"
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,13 +16,15 @@ type CollectionHandler struct {
 	voterMap         *votermap.VoterMap
 	bulletinBoardURL string
 	internalAPIKey   string
+	activeSetAPIKey  string
 }
 
-func NewCollectionHandler(vm *votermap.VoterMap, bbURL, apiKey string) *CollectionHandler {
+func NewCollectionHandler(vm *votermap.VoterMap, bbURL, apiKey, activeSetKey string) *CollectionHandler {
 	return &CollectionHandler{
 		voterMap:         vm,
 		bulletinBoardURL: bbURL,
 		internalAPIKey:   apiKey,
+		activeSetAPIKey:  activeSetKey,
 	}
 }
 
@@ -39,11 +42,22 @@ type submitResponse struct {
 }
 
 func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request) {
-	// Extract EGN from session (in production: validate JWT from auth service)
+	// TODO: In production, validate JWT from Auth Service and extract EGN from claims.
+	// Currently accepts X-Voter-EGN header for development only.
 	egn := r.Header.Get("X-Voter-EGN")
 	if egn == "" {
-		writeError(w, http.StatusUnauthorized, "missing_identity", "Voter identity required")
+		writeError(w, http.StatusUnauthorized, "missing_identity", "Voter identity required. Set X-Voter-EGN header (dev) or provide a valid JWT (production).")
 		return
+	}
+	if len(egn) != 10 {
+		writeError(w, http.StatusBadRequest, "invalid_egn", "EGN must be exactly 10 digits")
+		return
+	}
+	for _, c := range egn {
+		if c < '0' || c > '9' {
+			writeError(w, http.StatusBadRequest, "invalid_egn", "EGN must contain only digits")
+			return
+		}
 	}
 
 	var req submitRequest
@@ -151,4 +165,14 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	resp.Error.Code = code
 	resp.Error.Message = message
 	json.NewEncoder(w).Encode(resp)
+}
+
+func requireKey(key string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Internal-Key")), []byte(key)) != 1 {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Invalid API key")
+			return
+		}
+		next(w, r)
+	}
 }
