@@ -57,15 +57,20 @@ func (s *Store) Close() {
 	s.pool.Close()
 }
 
-// RunMigrations executes all SQL migration files.
+// RunMigrations executes all SQL migration files in sorted order.
 func (s *Store) RunMigrations(ctx context.Context) error {
-	sql, err := migrations.ReadFile("migrations/001_initial.sql")
+	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
-		return fmt.Errorf("read migration: %w", err)
+		return fmt.Errorf("read migrations dir: %w", err)
 	}
-	_, err = s.pool.Exec(ctx, string(sql))
-	if err != nil {
-		return fmt.Errorf("execute migration: %w", err)
+	for _, entry := range entries {
+		sql, err := migrations.ReadFile("migrations/" + entry.Name())
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
+		}
+		if _, err := s.pool.Exec(ctx, string(sql)); err != nil {
+			return fmt.Errorf("execute migration %s: %w", entry.Name(), err)
+		}
 	}
 	return nil
 }
@@ -202,4 +207,30 @@ func (s *Store) GetLatestSignedRoot(ctx context.Context) (*SignedRootRecord, err
 		return nil, err
 	}
 	return &rec, nil
+}
+
+// GetBoardState retrieves a value from the board_state table.
+func (s *Store) GetBoardState(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.pool.QueryRow(ctx,
+		`SELECT value FROM board_state WHERE key = $1`, key).Scan(&value)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get board state %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetBoardState upserts a key-value pair in the board_state table.
+func (s *Store) SetBoardState(ctx context.Context, key, value string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO board_state (key, value) VALUES ($1, $2)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		key, value)
+	if err != nil {
+		return fmt.Errorf("set board state %q: %w", key, err)
+	}
+	return nil
 }

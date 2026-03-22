@@ -34,9 +34,17 @@ func (b *Board) SetValidator(fn func(encryptedBallot, zkProofs json.RawMessage) 
 	b.validateFn = fn
 }
 
-// New creates a Board. It rebuilds the Merkle tree from existing data.
+// New creates a Board. It rebuilds the Merkle tree from existing data
+// and restores persisted state (e.g., sealed flag) from the database.
 func New(ctx context.Context, s *store.Store) (*Board, error) {
 	b := &Board{store: s, tree: merkle.New()}
+
+	// Restore sealed state from database
+	sealedVal, err := s.GetBoardState(ctx, "sealed")
+	if err != nil {
+		return nil, fmt.Errorf("load sealed state: %w", err)
+	}
+	b.sealed = sealedVal == "true"
 
 	// Rebuild tree from existing ballots
 	leaves, err := s.GetAllLeafData(ctx)
@@ -146,10 +154,15 @@ func (b *Board) Size() int {
 }
 
 // Seal marks the board as read-only. No more ballots can be appended.
-func (b *Board) Seal() {
+// The sealed state is persisted to the database so it survives restarts.
+func (b *Board) Seal(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if err := b.store.SetBoardState(ctx, "sealed", "true"); err != nil {
+		return fmt.Errorf("persist sealed state: %w", err)
+	}
 	b.sealed = true
+	return nil
 }
 
 // IsSealed returns whether the board is sealed.

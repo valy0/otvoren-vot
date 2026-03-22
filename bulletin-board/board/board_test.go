@@ -31,6 +31,8 @@ func setupBoard(t *testing.T) *Board {
 	// Clean for test isolation
 	s.Pool().Exec(ctx, "DELETE FROM signed_roots")
 	s.Pool().Exec(ctx, "DELETE FROM ballots")
+	s.Pool().Exec(ctx, "DELETE FROM board_state")
+	s.RunMigrations(ctx) // re-seed board_state defaults
 	t.Cleanup(func() { s.Close() })
 
 	b, err := New(ctx, s)
@@ -106,9 +108,52 @@ func TestSealPreventsAppend(t *testing.T) {
 	b := setupBoard(t)
 	ctx := context.Background()
 
-	b.Seal()
+	if err := b.Seal(ctx); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
 	_, err := b.AppendBallot(ctx, "after-seal", json.RawMessage(`{}`), json.RawMessage(`{}`))
 	if !errors.Is(err, ErrBoardSealed) {
 		t.Fatalf("expected ErrBoardSealed, got %v", err)
+	}
+}
+
+func TestSealPersistsAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	s, err := store.New(ctx, testDatabaseURL())
+	if err != nil {
+		t.Skipf("PostgreSQL not available: %v", err)
+	}
+	s.RunMigrations(ctx)
+	s.Pool().Exec(ctx, "DELETE FROM signed_roots")
+	s.Pool().Exec(ctx, "DELETE FROM ballots")
+	s.Pool().Exec(ctx, "DELETE FROM board_state")
+	s.RunMigrations(ctx) // re-seed board_state defaults
+	t.Cleanup(func() { s.Close() })
+
+	// Create board, seal it
+	b1, err := New(ctx, s)
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	if b1.IsSealed() {
+		t.Fatal("board should not be sealed initially")
+	}
+	if err := b1.Seal(ctx); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+
+	// Simulate restart: create a new Board from the same store
+	b2, err := New(ctx, s)
+	if err != nil {
+		t.Fatalf("create board after restart: %v", err)
+	}
+	if !b2.IsSealed() {
+		t.Fatal("board should still be sealed after restart")
+	}
+
+	// Verify appends are still blocked
+	_, err = b2.AppendBallot(ctx, "post-restart", json.RawMessage(`{}`), json.RawMessage(`{}`))
+	if !errors.Is(err, ErrBoardSealed) {
+		t.Fatalf("expected ErrBoardSealed after restart, got %v", err)
 	}
 }
