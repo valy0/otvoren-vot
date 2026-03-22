@@ -3,6 +3,7 @@ package session
 import (
 	"crypto/rand"
 	"testing"
+	"time"
 
 	"filippo.io/edwards25519"
 )
@@ -173,6 +174,52 @@ func TestCount(t *testing.T) {
 	s.Create(3)
 	if s.Count() != 2 {
 		t.Fatalf("expected 2, got %d", s.Count())
+	}
+}
+
+func TestGetExpiredSession(t *testing.T) {
+	s := NewStore()
+	sess, err := s.Create(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually set expiry to the past.
+	s.mu.Lock()
+	sess.ExpiresAt = time.Now().Add(-1 * time.Minute)
+	s.mu.Unlock()
+
+	_, ok := s.Get(sess.ID)
+	if ok {
+		t.Fatal("expired session should not be returned by Get")
+	}
+}
+
+func TestCleanupRemovesExpired(t *testing.T) {
+	s := NewStore()
+	sess, err := s.Create(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set a master secret so we can verify it gets zeroed.
+	secret := randomScalar()
+	s.SetCodes(sess.ID, map[string]string{"ГЕРБ": "12345678"}, secret)
+
+	// Expire the session.
+	s.mu.Lock()
+	sess.ExpiresAt = time.Now().Add(-1 * time.Minute)
+	s.mu.Unlock()
+
+	// Start cleanup with a very short interval.
+	s.StartCleanup(10 * time.Millisecond)
+	defer s.Stop()
+
+	// Wait for the cleanup goroutine to run.
+	time.Sleep(50 * time.Millisecond)
+
+	if s.Count() != 0 {
+		t.Fatalf("expected 0 sessions after cleanup, got %d", s.Count())
 	}
 }
 

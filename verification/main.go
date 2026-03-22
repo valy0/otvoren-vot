@@ -32,6 +32,7 @@ func main() {
 	}
 
 	sessions := session.NewStore()
+	sessions.StartCleanup(5 * time.Minute)
 
 	handler := &VerificationHandler{
 		sessions:  sessions,
@@ -73,6 +74,7 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		log.Println("Verification service shutting down...")
+		sessions.Stop()
 		srv.Close()
 	}()
 

@@ -10,10 +10,14 @@ import (
 	"filippo.io/edwards25519"
 )
 
+// SessionTTL is the default lifetime for verification sessions.
+const SessionTTL = 30 * time.Minute
+
 // Session represents an active verification session.
 type Session struct {
 	ID           string                       `json:"id"`
 	CreatedAt    time.Time                    `json:"created_at"`
+	ExpiresAt    time.Time                    `json:"expires_at"`
 	Verified     bool                         `json:"verified"` // whether return code has been delivered
 	Shares       map[int]*edwards25519.Scalar // trustee_index -> share
 	MasterSecret *edwards25519.Scalar         // kept for return code derivation, zeroed at expiry
@@ -28,6 +32,7 @@ type Session struct {
 type Store struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
+	stopCh   chan struct{} // signals the cleanup goroutine to exit
 }
 
 // NewStore creates an empty session store.
@@ -41,9 +46,11 @@ func (s *Store) Create(threshold int) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	sess := &Session{
 		ID:        id,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
+		ExpiresAt: now.Add(SessionTTL),
 		Shares:    make(map[int]*edwards25519.Scalar),
 		Threshold: threshold,
 	}
@@ -53,12 +60,18 @@ func (s *Store) Create(threshold int) (*Session, error) {
 	return sess, nil
 }
 
-// Get retrieves a session by ID.
+// Get retrieves a session by ID. Returns nil if the session has expired.
 func (s *Store) Get(id string) (*Session, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	sess, ok := s.sessions[id]
-	return sess, ok
+	if !ok {
+		return nil, false
+	}
+	if time.Now().After(sess.ExpiresAt) {
+		return nil, false
+	}
+	return sess, true
 }
 
 // AddShare adds a trustee's key share to a session.
@@ -139,6 +152,54 @@ func (s *Store) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.sessions)
+}
+
+// StartCleanup launches a background goroutine that periodically removes
+// expired sessions, zeroing their cryptographic material via Close.
+func (s *Store) StartCleanup(interval time.Duration) {
+	s.stopCh = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.removeExpired()
+			case <-s.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// Stop signals the cleanup goroutine to exit.
+func (s *Store) Stop() {
+	if s.stopCh != nil {
+		close(s.stopCh)
+	}
+}
+
+// removeExpired deletes all sessions past their ExpiresAt, zeroing crypto material.
+func (s *Store) removeExpired() {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, sess := range s.sessions {
+		if now.After(sess.ExpiresAt) {
+			// Zero master secret
+			if sess.MasterSecret != nil {
+				zero := edwards25519.NewScalar()
+				sess.MasterSecret.Set(zero)
+				sess.MasterSecret = nil
+			}
+			// Zero individual shares
+			zero := edwards25519.NewScalar()
+			for _, share := range sess.Shares {
+				share.Set(zero)
+			}
+			delete(s.sessions, id)
+		}
+	}
 }
 
 func generateID() (string, error) {
