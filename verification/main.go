@@ -9,76 +9,57 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/valy0/otvoren-vot/verification/codes"
+	"github.com/valy0/otvoren-vot/crypto/threshold"
+	"github.com/valy0/otvoren-vot/pkg/middleware"
 	"github.com/valy0/otvoren-vot/verification/session"
 )
 
 func main() {
 	cfg := LoadConfig()
 
-	sessions := session.NewStore()
-	// In production, this secret is threshold-distributed among verification trustees
-	secretStr := os.Getenv("VERIFICATION_SECRET")
-	if secretStr == "" {
-		log.Fatal("VERIFICATION_SECRET environment variable must be set")
+	// Validate configuration
+	if !cfg.DevMode && cfg.VerificationAPIKey == "" {
+		log.Fatal("VERIFICATION_API_KEY must be set in production mode")
 	}
-	verificationSecret := []byte(secretStr)
-	parties := []string{"ГЕРБ", "ПП-ДБ", "ДПС", "БСП", "Възраждане"}
+	if cfg.TrusteeThreshold < 1 || cfg.TrusteeTotal < cfg.TrusteeThreshold {
+		log.Fatalf("Invalid threshold config: t=%d, n=%d", cfg.TrusteeThreshold, cfg.TrusteeTotal)
+	}
+
+	// Load parties from JSON file or fall back to env/default
+	parties := loadParties(cfg.PartyListPath)
+	if len(parties) == 0 {
+		log.Fatal("No parties configured; set PARTY_LIST_PATH to a JSON file or provide defaults")
+	}
+
+	sessions := session.NewStore()
+
+	handler := &VerificationHandler{
+		sessions:  sessions,
+		parties:   parties,
+		threshold: cfg.TrusteeThreshold,
+	}
+
+	// Dev mode: run a local DKG to generate a dev secret
+	if cfg.DevMode {
+		log.Printf("DEV MODE: running local DKG (%d-of-%d) for development secret",
+			cfg.TrusteeThreshold, cfg.TrusteeTotal)
+		dealer := threshold.NewDealer(cfg.TrusteeThreshold, cfg.TrusteeTotal)
+		handler.devSecret = dealer.Secret()
+	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/session", handler.HandleCreateSession)
+	mux.HandleFunc("POST /api/v1/verify", handler.HandleVerify)
+	mux.HandleFunc("GET /health", handler.HandleHealth)
 
-	// Create a new verification session (called by extension after page load)
-	mux.HandleFunc("POST /api/v1/session", func(w http.ResponseWriter, r *http.Request) {
-		sess, err := sessions.Create()
-		if err != nil {
-			http.Error(w, "failed to create session", 500)
-			return
-		}
-		mapping := codes.GenerateCodeMapping(sess.ID, parties, verificationSecret)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"session_id":   sess.ID,
-			"code_mapping": mapping.Codes,
-		})
-	})
-
-	// Get return code for a submitted ballot (called by extension after submission)
-	mux.HandleFunc("POST /api/v1/verify", func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			SessionID       string          `json:"session_id"`
-			EncryptedBallot json.RawMessage `json:"encrypted_ballot"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid body", 400)
-			return
-		}
-
-		sess, ok := sessions.Get(req.SessionID)
-		if !ok {
-			http.Error(w, "invalid session", 404)
-			return
-		}
-		if sess.Verified {
-			http.Error(w, "session already verified", 409)
-			return
-		}
-
-		returnCode := codes.DeriveReturnCode(verificationSecret, req.SessionID, req.EncryptedBallot)
-		sessions.MarkVerified(req.SessionID)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"return_code": returnCode,
-		})
-	})
-
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":   "ok",
-			"sessions": sessions.Count(),
-		})
-	})
+	// Internal endpoint protected by API key
+	if cfg.VerificationAPIKey != "" {
+		mux.HandleFunc("POST /internal/v1/shares",
+			middleware.RequireKey(cfg.VerificationAPIKey, handler.HandleSubmitShare))
+	} else if cfg.DevMode {
+		// In dev mode without API key, expose unprotected for testing
+		mux.HandleFunc("POST /internal/v1/shares", handler.HandleSubmitShare)
+	}
 
 	srv := &http.Server{
 		Addr:         cfg.ListenAddr,
@@ -95,8 +76,35 @@ func main() {
 		srv.Close()
 	}()
 
-	log.Printf("Verification service listening on %s", cfg.ListenAddr)
+	log.Printf("Verification service listening on %s (dev_mode=%v, threshold=%d-of-%d, parties=%d)",
+		cfg.ListenAddr, cfg.DevMode, cfg.TrusteeThreshold, cfg.TrusteeTotal, len(parties))
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+// loadParties reads a JSON array of party names from path, or returns a default list.
+func loadParties(path string) []string {
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			log.Fatalf("Failed to read party list from %s: %v", path, err)
+		}
+		var parties []string
+		if err := json.Unmarshal(data, &parties); err != nil {
+			log.Fatalf("Failed to parse party list from %s: %v", path, err)
+		}
+		return parties
+	}
+
+	// Fall back to PARTIES env or hardcoded default
+	if env := os.Getenv("PARTIES"); env != "" {
+		var parties []string
+		if err := json.Unmarshal([]byte(env), &parties); err != nil {
+			log.Fatalf("Failed to parse PARTIES env: %v", err)
+		}
+		return parties
+	}
+
+	return []string{"ГЕРБ", "ПП-ДБ", "ДПС", "БСП", "Възраждане"}
 }
