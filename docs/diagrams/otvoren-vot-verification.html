@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otvoren-Vot — Verification & Trust Chain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-body: 'Sora', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    --bg: #080c14; --surface: #0f1520; --surface2: #161e2e;
+    --border: rgba(255,255,255,0.07); --border-bright: rgba(255,255,255,0.14);
+    --text: #eaf0f8; --text-dim: #9ca3bf;
+    --green: #00c98d; --green-dim: rgba(0,201,141,0.09);
+    --blue: #3b82f6; --blue-dim: rgba(59,130,246,0.09);
+    --purple: #a78bfa; --purple-dim: rgba(167,139,250,0.09);
+    --gold: #fbbf24; --gold-dim: rgba(251,191,36,0.09);
+    --cyan: #22d3ee; --cyan-dim: rgba(34,211,238,0.09);
+    --pink: #f472b6; --pink-dim: rgba(244,114,182,0.09);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fc; --surface: #ffffff; --surface2: #f0f2f7;
+      --border: rgba(0,0,0,0.08); --border-bright: rgba(0,0,0,0.16);
+      --text: #1e293b; --text-dim: #475569;
+      --green: #059669; --green-dim: rgba(5,150,105,0.07);
+      --blue: #1d4ed8; --blue-dim: rgba(29,78,216,0.07);
+      --purple: #6d28d9; --purple-dim: rgba(109,40,217,0.07);
+      --gold: #b45309; --gold-dim: rgba(180,83,9,0.07);
+      --cyan: #0891b2; --cyan-dim: rgba(8,145,178,0.07);
+      --pink: #db2777; --pink-dim: rgba(219,39,119,0.07);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 30% 10%, var(--green-dim) 0%, transparent 35%),
+      radial-gradient(ellipse at 70% 90%, var(--purple-dim) 0%, transparent 35%);
+    color: var(--text); font-family: var(--font-body);
+    padding: 48px 40px 60px; min-height: 100vh;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeScale { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+  .anim { animation: fadeUp 0.45s ease-out both; animation-delay: calc(var(--i,0) * 0.06s); }
+  .anim-s { animation: fadeScale 0.45s ease-out both; animation-delay: calc(var(--i,0) * 0.06s); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; } }
+
+  .container { max-width: 1050px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 44px; }
+  .header .flag { display: inline-flex; border-radius: 4px; overflow: hidden; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+  .header .flag span { width: 28px; height: 6px; }
+  .f-w { background: #fff; } .f-g { background: #00966E; } .f-r { background: #D62612; }
+  .subtitle { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 38px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 10px; }
+  .tagline { font-size: 14px; color: var(--text-dim); line-height: 1.7; max-width: 660px; margin: 0 auto; }
+
+  .sec-title {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 2px;
+    margin-bottom: 20px; margin-top: 40px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sec-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .sec-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* Verification levels */
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .level {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px; position: relative; overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .level:hover { border-color: var(--border-bright); transform: translateY(-2px); }
+  .level-num { font-family: var(--font-mono); font-size: 48px; font-weight: 700; position: absolute; top: -8px; right: 12px; opacity: 0.06; }
+  .level-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    padding: 3px 10px; border-radius: 4px; margin-bottom: 12px;
+  }
+  .badge--immediate { background: var(--green-dim); color: var(--green); }
+  .badge--individual { background: var(--blue-dim); color: var(--blue); }
+  .badge--delegated { background: var(--purple-dim); color: var(--purple); }
+  .level h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .level .when { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+  .level p { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
+  .level .actor { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-dim); }
+  .level .actor strong { color: var(--text); }
+
+  /* Four proofs */
+  .proofs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .proof {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px 24px; transition: border-color 0.2s;
+  }
+  .proof:hover { border-color: var(--border-bright); }
+  .proof-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .proof-icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-family: var(--font-mono); font-weight: 600; flex-shrink: 0;
+  }
+  .proof h3 { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .proof .proof-framework { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .proof p { font-size: 13px; color: var(--text-dim); line-height: 1.65; margin-bottom: 12px; }
+
+  .proof-props { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .proof-prop { background: var(--surface2); border-radius: 6px; padding: 8px 10px; }
+  .proof-prop .prop-label { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 2px; }
+  .proof-prop .prop-val { font-size: 12px; font-weight: 500; }
+
+  .proof--1 { border-left: 3px solid var(--green); }
+  .proof--1 .proof-icon { background: var(--green-dim); color: var(--green); }
+  .proof--2 { border-left: 3px solid var(--purple); }
+  .proof--2 .proof-icon { background: var(--purple-dim); color: var(--purple); }
+  .proof--3 { border-left: 3px solid var(--gold); }
+  .proof--3 .proof-icon { background: var(--gold-dim); color: var(--gold); }
+  .proof--4 { border-left: 3px solid var(--cyan); }
+  .proof--4 .proof-icon { background: var(--cyan-dim); color: var(--cyan); }
+
+  /* Proof chain */
+  .chain { display: flex; align-items: stretch; gap: 0; margin-top: 32px; overflow-x: auto; padding-bottom: 4px; }
+  .chain-link {
+    flex: 1; min-width: 140px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; text-align: center;
+  }
+  .chain-link .chain-num { font-family: var(--font-mono); font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+  .chain-link .chain-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .chain-link .chain-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+  .chain-arrow { display: flex; align-items: center; padding: 0 4px; font-size: 16px; color: var(--border-bright); flex-shrink: 0; }
+  .chain-link--1 { border-color: rgba(0,201,141,0.2); } .chain-link--1 .chain-num { color: var(--green); }
+  .chain-link--2 { border-color: rgba(167,139,250,0.2); } .chain-link--2 .chain-num { color: var(--purple); }
+  .chain-link--3 { border-color: rgba(251,191,36,0.2); } .chain-link--3 .chain-num { color: var(--gold); }
+  .chain-link--4 { border-color: rgba(34,211,238,0.2); } .chain-link--4 .chain-num { color: var(--cyan); }
+  .chain-link--5 { border-color: rgba(244,114,182,0.2); } .chain-link--5 .chain-num { color: var(--pink); }
+
+  .trust {
+    background: var(--green-dim); border: 1px solid rgba(0,201,141,0.15);
+    border-radius: 14px; padding: 24px 28px; margin-top: 32px; text-align: center;
+  }
+  .trust h3 { font-size: 15px; font-weight: 600; color: var(--green); margin-bottom: 8px; }
+  .trust p { font-size: 13px; color: var(--text-dim); line-height: 1.7; max-width: 640px; margin: 0 auto; }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  @media (max-width: 900px) { .levels { grid-template-columns: 1fr; } .proofs { grid-template-columns: 1fr; } .chain { flex-wrap: wrap; gap: 8px; } .chain-arrow { display: none; } }
+  @media (max-width: 768px) { body { padding: 20px; } h1 { font-size: 26px; } .proof-props { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header anim" style="--i:0">
+    <div class="flag"><span class="f-w"></span><span class="f-g"></span><span class="f-r"></span></div>
+    <p class="subtitle">Otvoren-Vot &middot; End-to-End Verifiable E-Voting</p>
+    <h1>Verification &amp; Trust Chain</h1>
+    <p class="tagline">Three levels of verification ensure no trust in any single entity is required. Four independent cryptographic proofs cover every step from ballot submission to final results. If the proofs verify, the results are correct.</p>
+  </div>
+
+  <div class="sec-title anim" style="--i:1; color: var(--green);"><span class="dot" style="background:var(--green)"></span>Three Levels of Trust</div>
+
+  <div class="levels">
+    <div class="level anim-s" style="--i:2">
+      <div class="level-num">1</div>
+      <div class="level-badge badge--immediate">Immediate</div>
+      <h3>Return Code Verification</h3>
+      <div class="when">During voting — within seconds of submission</div>
+      <p>Browser extension displays a 6-digit return code derived by 3-of-5 verification trustees. If it matches the pre-loaded code mapping, the voter knows their intended ballot was correctly encrypted and recorded — even if the voting page was compromised.</p>
+      <div class="actor"><strong>Who:</strong> The voter, via browser extension popup</div>
+    </div>
+    <div class="level anim-s" style="--i:3">
+      <div class="level-num">2</div>
+      <div class="level-badge badge--individual">Individual</div>
+      <h3>Ballot Inclusion Check</h3>
+      <div class="when">Post-election — at verify.izbori.bg</div>
+      <p>Enter your ballot ID and receive a Merkle inclusion proof confirming your ballot is in the active counted set. This is an <strong>inclusion-only</strong> proof — confirms the ballot was counted without revealing contents. A voter cannot prove to a third party what they voted for.</p>
+      <div class="actor"><strong>Who:</strong> Any voter who saved their ballot ID</div>
+    </div>
+    <div class="level anim-s" style="--i:4">
+      <div class="level-num">3</div>
+      <div class="level-badge badge--delegated">Full Audit</div>
+      <h3>Full Independent Verification</h3>
+      <div class="when">Post-ceremony — via CLI tools or custom code</div>
+      <p>Download the entire bulletin board. Rebuild the Merkle tree. Verify every ballot proof. Check the dedup SNARK. Verify all trustee Chaum-Pedersen proofs. Recompute the tally from raw data. Confirm results match.</p>
+      <div class="actor"><strong>Who:</strong> Political parties, NGOs, universities, media, any citizen</div>
+    </div>
+  </div>
+
+  <div class="sec-title anim" style="--i:5; color: var(--purple);"><span class="dot" style="background:var(--purple)"></span>Four Cryptographic Proofs</div>
+
+  <div class="proofs">
+    <div class="proof proof--1 anim" style="--i:6">
+      <div class="proof-header">
+        <div class="proof-icon">P1</div>
+        <div><h3>Ballot Validity</h3><div class="proof-framework">Sigma Protocol (OR-proof + sum-proof)</div></div>
+      </div>
+      <p>Every accepted ballot encodes exactly one party choice and at most one candidate preference, using only 0/1 values. Attached to each ballot at submission time.</p>
+      <div class="proof-props">
+        <div class="proof-prop"><div class="prop-label">Framework</div><div class="prop-val">Sigma (Ristretto255)</div></div>
+        <div class="proof-prop"><div class="prop-label">Proof Size</div><div class="prop-val">64–128 bytes/stmt</div></div>
+        <div class="proof-prop"><div class="prop-label">Published</div><div class="prop-val">At ballot submission</div></div>
+        <div class="proof-prop"><div class="prop-label">Trusted Setup</div><div class="prop-val" style="color:var(--green)">None required</div></div>
+      </div>
+    </div>
+    <div class="proof proof--2 anim" style="--i:7">
+      <div class="proof-header">
+        <div class="proof-icon">P2</div>
+        <div><h3>Honest Deduplication</h3><div class="proof-framework">gnark Groth16 SNARK (BN254)</div></div>
+      </div>
+      <p>The filtered ballot set matches the committed active set exactly — no ballots added, removed, or substituted. Each included ballot has a valid Merkle path and count matches.</p>
+      <div class="proof-props">
+        <div class="proof-prop"><div class="prop-label">Framework</div><div class="prop-val">Groth16 SNARK (BN254)</div></div>
+        <div class="proof-prop"><div class="prop-label">Proof Size</div><div class="prop-val" style="color:var(--purple)">~192 bytes (constant)</div></div>
+        <div class="proof-prop"><div class="prop-label">Published</div><div class="prop-val">During ceremony</div></div>
+        <div class="proof-prop"><div class="prop-label">Trusted Setup</div><div class="prop-val" style="color:var(--gold)">MPC ceremony (1 honest)</div></div>
+      </div>
+    </div>
+    <div class="proof proof--3 anim" style="--i:8">
+      <div class="proof-header">
+        <div class="proof-icon">P3</div>
+        <div><h3>Honest Partial Decryption</h3><div class="proof-framework">Chaum-Pedersen (Sigma Protocol)</div></div>
+      </div>
+      <p>Each trustee's partial decryption share was correctly computed from the encrypted tally sums using their secret key share. One proof per trustee per tally slot.</p>
+      <div class="proof-props">
+        <div class="proof-prop"><div class="prop-label">Framework</div><div class="prop-val">Chaum-Pedersen</div></div>
+        <div class="proof-prop"><div class="prop-label">Per Trustee</div><div class="prop-val">2,550 proofs</div></div>
+        <div class="proof-prop"><div class="prop-label">Published</div><div class="prop-val">Live during ceremony</div></div>
+        <div class="proof-prop"><div class="prop-label">Trusted Setup</div><div class="prop-val" style="color:var(--green)">None required</div></div>
+      </div>
+    </div>
+    <div class="proof proof--4 anim" style="--i:9">
+      <div class="proof-header">
+        <div class="proof-icon">P4</div>
+        <div><h3>Tally Correctness</h3><div class="proof-framework">Sigma Protocol + BSGS Verification</div></div>
+      </div>
+      <p>Published plaintext vote totals are the correct decryption of the homomorphic ciphertext sums. Combines verification of all partial decryptions and final discrete-log recovery.</p>
+      <div class="proof-props">
+        <div class="proof-prop"><div class="prop-label">Framework</div><div class="prop-val">Sigma + BSGS</div></div>
+        <div class="proof-prop"><div class="prop-label">Verification</div><div class="prop-val">2–4 scalar mults/proof</div></div>
+        <div class="proof-prop"><div class="prop-label">Published</div><div class="prop-val">End of ceremony</div></div>
+        <div class="proof-prop"><div class="prop-label">Trusted Setup</div><div class="prop-val" style="color:var(--green)">None required</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec-title anim" style="--i:10; color: var(--cyan);"><span class="dot" style="background:var(--cyan)"></span>End-to-End Proof Chain</div>
+
+  <div class="chain anim" style="--i:11">
+    <div class="chain-link chain-link--1"><div class="chain-num" style="color:var(--green)">P1</div><div class="chain-name">Ballot Validity</div><div class="chain-desc">Each vote is Enc(0) or Enc(1), sums to exactly 1</div></div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-link chain-link--5"><div class="chain-num" style="color:var(--pink)">Merkle</div><div class="chain-name">Append-Only Board</div><div class="chain-desc">Signed roots every 60s, monitors verify consistency</div></div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-link chain-link--2"><div class="chain-num" style="color:var(--purple)">P2</div><div class="chain-name">Deduplication</div><div class="chain-desc">Active set matches commitment, correct count</div></div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-link chain-link--3"><div class="chain-num" style="color:var(--gold)">P3</div><div class="chain-name">Partial Decryptions</div><div class="chain-desc">Each trustee's share correctly computed</div></div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-link chain-link--4"><div class="chain-num" style="color:var(--cyan)">P4</div><div class="chain-name">Tally Correctness</div><div class="chain-desc">Plaintext results = decrypted encrypted sums</div></div>
+  </div>
+
+  <div class="trust anim" style="--i:12">
+    <h3>Full Independent Verifiability</h3>
+    <p>If the proofs verify, the results are correct — regardless of whether any server, trustee, or administrator acted honestly. No trust in any single entity is required. Any political party, NGO, university, journalist, or private citizen can independently verify the entire chain from raw data.</p>
+  </div>
+
+  <div class="legend anim" style="--i:13">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div>Ballot Validity (Sigma)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--purple)"></div>Dedup SNARK (Groth16)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--gold)"></div>Partial Decryption (Chaum-Pedersen)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--cyan)"></div>Tally Correctness (Sigma)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--pink)"></div>Merkle Tamper-Evidence</div>
+  </div>
+
+</div>
+</body>
+</html>

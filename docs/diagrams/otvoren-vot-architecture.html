@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otvoren-Vot — System Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-body: 'Sora', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+    /* Dark theme (primary) */
+    --bg: #080c14;
+    --surface: #0f1520;
+    --surface2: #161e2e;
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.14);
+    --text: #eaf0f8;
+    --text-dim: #9ca3bf;
+
+    --l1: #f59e0b;
+    --l1-dim: rgba(245,158,11,0.09);
+    --l1-surface: rgba(245,158,11,0.04);
+    --l2: #3b82f6;
+    --l2-dim: rgba(59,130,246,0.09);
+    --l2-surface: rgba(59,130,246,0.04);
+    --voter: #a78bfa;
+    --voter-dim: rgba(167,139,250,0.09);
+    --public: #2dd4bf;
+    --public-dim: rgba(45,212,191,0.09);
+    --green: #00c98d;
+    --green-dim: rgba(0,201,141,0.09);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.09);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fc;
+      --surface: #ffffff;
+      --surface2: #f0f2f7;
+      --border: rgba(0,0,0,0.08);
+      --border-bright: rgba(0,0,0,0.16);
+      --text: #1e293b;
+      --text-dim: #475569;
+
+      --l1: #b45309;
+      --l1-dim: rgba(180,83,9,0.07);
+      --l1-surface: rgba(180,83,9,0.03);
+      --l2: #1d4ed8;
+      --l2-dim: rgba(29,78,216,0.07);
+      --l2-surface: rgba(29,78,216,0.03);
+      --voter: #6d28d9;
+      --voter-dim: rgba(109,40,217,0.07);
+      --public: #0d9488;
+      --public-dim: rgba(13,148,136,0.07);
+      --green: #059669;
+      --green-dim: rgba(5,150,105,0.07);
+      --red: #dc2626;
+      --red-dim: rgba(220,38,38,0.07);
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 25% 0%, var(--l1-dim) 0%, transparent 45%),
+      radial-gradient(ellipse at 75% 100%, var(--l2-dim) 0%, transparent 45%);
+    color: var(--text);
+    font-family: var(--font-body);
+    padding: 48px 40px 60px;
+    min-height: 100vh;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .anim { animation: fadeUp 0.45s ease-out both; animation-delay: calc(var(--i,0) * 0.07s); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  .diagram { max-width: 1120px; margin: 0 auto; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 48px; }
+  .header .flag {
+    display: inline-flex; border-radius: 4px; overflow: hidden; margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  }
+  .header .flag span { width: 28px; height: 6px; }
+  .f-w { background: #fff; } .f-g { background: #00966E; } .f-r { background: #D62612; }
+
+  h1 { font-size: 40px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 10px; }
+  .subtitle {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px;
+  }
+  .tagline { font-size: 15px; color: var(--text-dim); line-height: 1.7; max-width: 680px; margin: 0 auto; }
+  .tagline strong { color: var(--text); }
+
+  /* Layer containers */
+  .layer {
+    border-radius: 16px; padding: 28px; margin-bottom: 12px;
+    border: 1px solid var(--border); position: relative;
+  }
+  .layer--1 { background: var(--l1-surface); border-color: rgba(245,158,11,0.12); }
+  .layer--2 { background: var(--l2-surface); border-color: rgba(59,130,246,0.12); }
+
+  .layer-label {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+  }
+  .layer-label .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .layer-label .l1-color { background: var(--l1); }
+  .layer-label .l2-color { background: var(--l2); }
+  .layer-label .sublabel { color: var(--text-dim); font-weight: 400; font-size: 11px; text-transform: none; letter-spacing: 0; }
+
+  .tag {
+    font-family: var(--font-mono); font-size: 9px; padding: 2px 8px;
+    border-radius: 4px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .tag--l1 { background: var(--l1-dim); color: var(--l1); }
+  .tag--l2 { background: var(--l2-dim); color: var(--l2); }
+
+  /* Service cards */
+  .services { display: grid; gap: 14px; }
+  .services--2 { grid-template-columns: 1fr 1fr; }
+  .services--3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  .svc {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .svc:hover { border-color: var(--border-bright); box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+
+  .svc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .svc-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .svc-icon--l1 { background: var(--l1-dim); color: var(--l1); }
+  .svc-icon--l2 { background: var(--l2-dim); color: var(--l2); }
+  .svc-icon--voter { background: var(--voter-dim); color: var(--voter); }
+  .svc-icon--public { background: var(--public-dim); color: var(--public); }
+
+  .svc-name { font-size: 15px; font-weight: 600; }
+  .svc-tech { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .svc-desc { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
+
+  .svc-knows {
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+    font-size: 12px; line-height: 1.6;
+  }
+  .knows-yes { color: var(--green); }
+  .knows-no { color: var(--red); opacity: 0.85; }
+
+  /* Flow arrows */
+  .flow-arrow {
+    display: flex; justify-content: center; align-items: center; gap: 10px;
+    padding: 8px 0; color: var(--text-dim);
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .flow-arrow svg {
+    width: 20px; height: 20px; fill: none;
+    stroke: var(--border-bright); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* Network isolation barrier */
+  .isolation { position: relative; text-align: center; padding: 18px 0; margin: 4px 0; }
+  .isolation::before {
+    content: ''; position: absolute; top: 50%; left: 0; right: 0;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--red) 0, var(--red) 8px, transparent 8px, transparent 16px);
+    opacity: 0.4;
+  }
+  .iso-label {
+    position: relative; z-index: 1;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg); padding: 6px 16px;
+    border: 1px solid var(--red-dim); border-radius: 6px;
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--red); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;
+  }
+  .iso-label svg {
+    width: 14px; height: 14px; stroke: var(--red); fill: none; stroke-width: 2; stroke-linecap: round;
+  }
+
+  /* Handoff callout */
+  .handoff {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 0 10px 10px 0; padding: 16px 20px;
+    margin: 4px 0; display: flex; align-items: flex-start; gap: 14px;
+  }
+  .handoff-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--green-dim); color: var(--green);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .handoff-text { font-size: 13px; line-height: 1.65; color: var(--text-dim); }
+  .handoff-text strong { color: var(--text); }
+  .handoff-text code {
+    font-family: var(--font-mono); font-size: 11px;
+    background: var(--green-dim); color: var(--green);
+    padding: 1px 6px; border-radius: 3px;
+  }
+
+  /* Generic section */
+  .section-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; margin-bottom: 12px;
+  }
+
+  /* Trust callout */
+  .trust-callout {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px 28px; margin-top: 24px; text-align: center;
+  }
+  .trust-callout h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; color: var(--green); }
+  .trust-callout p { font-size: 13px; color: var(--text-dim); line-height: 1.65; max-width: 640px; margin: 0 auto; }
+
+  /* Legend */
+  .legend {
+    display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+    margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+  }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    body { padding: 20px; }
+    h1 { font-size: 28px; }
+    .services--2, .services--3 { grid-template-columns: 1fr; }
+    .layer { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="diagram">
+
+  <div class="header anim" style="--i:0">
+    <div class="flag"><span class="f-w"></span><span class="f-g"></span><span class="f-r"></span></div>
+    <p class="subtitle">Otvoren-Vot &middot; End-to-End Verifiable E-Voting</p>
+    <h1>Two-Layer System Architecture</h1>
+    <p class="tagline">
+      Privacy by separation. <strong>Layer 1</strong> knows <em>who</em> voted but never sees ballot content.
+      <strong>Layer 2</strong> sees encrypted ballots but never learns voter identity.
+      No single component can link a ballot to a voter.
+    </p>
+  </div>
+
+  <!-- Voter Interfaces -->
+  <div class="section-box anim" style="--i:1">
+    <div class="layer-label">
+      <span class="dot" style="background:var(--voter)"></span>
+      <span style="color:var(--voter)">Voter Interfaces</span>
+      <span class="sublabel">— Client-side encryption and ZK proof generation</span>
+    </div>
+    <div class="services services--3">
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--voter">🌐</div>
+          <div><div class="svc-name">Web App</div><div class="svc-tech">TypeScript / React — izbori.bg</div></div>
+        </div>
+        <div class="svc-desc">Voter-facing UI. All encryption happens in-browser using ElGamal over Ristretto255 via libsodium.js WASM. Generates ZK validity proofs and random 256-bit ballot IDs client-side.</div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--voter">🖥️</div>
+          <div><div class="svc-name">Voting Machine</div><div class="svc-tech">Go / Embedded Linux — TPM attested</div></div>
+        </div>
+        <div class="svc-desc">Polling station kiosk. Hardware-verified boot via TPM. Encrypts ballots with same Go crypto library as servers. Offline-first with SQLite queue and signed USB fallback.</div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--voter">🔌</div>
+          <div><div class="svc-name">Browser Extension</div><div class="svc-tech">TypeScript — Manifest V3</div></div>
+        </div>
+        <div class="svc-desc">Malware detection via threshold return codes. Runs in isolated service worker — page JS cannot access it. Pins TLS cert and checks page script hash independently.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-arrow anim" style="--i:2">
+    <svg viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12"/></svg>
+    encrypted ballot + ZK proofs + eAuth session
+  </div>
+
+  <!-- Layer 1 — Identity -->
+  <div class="layer layer--1 anim" style="--i:3">
+    <div class="layer-label">
+      <span class="dot l1-color"></span>
+      <span style="color:var(--l1)">Layer 1 — Identity</span>
+      <span class="tag tag--l1">Knows WHO, not WHAT</span>
+    </div>
+    <div class="services services--2">
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--l1">🔑</div>
+          <div><div class="svc-name">Auth Service</div><div class="svc-tech">Go — eAuth 2.0 / SAML 2.0</div></div>
+        </div>
+        <div class="svc-desc">Authenticates voters via Bulgarian national eAuth. Validates identity, checks eligibility against electoral rolls, issues JWT session tokens (30 min TTL). Ships with mock eAuth for development.</div>
+        <div class="svc-knows">
+          <span class="knows-yes">✓ Voter ЕГН, eligibility, session</span><br>
+          <span class="knows-no">✗ Never sees ballot content</span>
+        </div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--l1">📮</div>
+          <div><div class="svc-name">Collection Server</div><div class="svc-tech">Go — Identity stripping gateway</div></div>
+        </div>
+        <div class="svc-desc">Receives encrypted ballots. Records ЕГН → ballot_id mapping. Strips ALL identity (ЕГН, session, IP, headers) before forwarding to Layer 2. Returns Merkle inclusion proof to voter.</div>
+        <div class="svc-knows">
+          <span class="knows-yes">✓ Who voted, which ballot_id is theirs</span><br>
+          <span class="knows-no">✗ Forwards encrypted ballot without reading it</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Network Isolation -->
+  <div class="isolation anim" style="--i:4">
+    <div class="iso-label">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      Network Isolation — Hardware firewalls in production
+    </div>
+  </div>
+
+  <!-- One-time handoff -->
+  <div class="handoff anim" style="--i:5">
+    <div class="handoff-icon">→</div>
+    <div class="handoff-text">
+      <strong>One-time handoff at polls close (20:00).</strong>
+      Layer 1 computes the active ballot ID set (one per voter, most recent) and delivers it to the Tally Service.
+      Only <code>ballot_ids</code> cross the boundary — no ЕГНs, no voter data.
+      Requires <strong>dual-operator approval</strong> from two ЦИК administrators.
+      No return path — Layer 2 can never query Layer 1.
+    </div>
+  </div>
+
+  <!-- Layer 2 — Ballots -->
+  <div class="layer layer--2 anim" style="--i:6">
+    <div class="layer-label">
+      <span class="dot l2-color"></span>
+      <span style="color:var(--l2)">Layer 2 — Ballots</span>
+      <span class="tag tag--l2">Knows WHAT, not WHO</span>
+    </div>
+    <div class="services services--3">
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--l2">📋</div>
+          <div><div class="svc-name">Bulletin Board</div><div class="svc-tech">Go + PostgreSQL — Public ledger</div></div>
+        </div>
+        <div class="svc-desc">Append-only Merkle tree. Dual-hash: SHA-256 for public verification, Poseidon/BN254 for SNARK circuits. Publishes signed root every 60 seconds. Fully public read API.</div>
+        <div class="svc-knows">
+          <span class="knows-yes">✓ All encrypted ballots and ZK proofs</span><br>
+          <span class="knows-no">✗ No voter identity — only random 256-bit IDs</span>
+        </div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--l2">🧮</div>
+          <div><div class="svc-name">Tally Service</div><div class="svc-tech">Go — gnark Groth16 + Ristretto255</div></div>
+        </div>
+        <div class="svc-desc">Homomorphic tallying — ciphertext multiplication, no ballot decrypted. Generates ZK dedup proof (gnark SNARK). Coordinates 5-of-9 threshold decryption ceremony with trustee HSMs.</div>
+        <div class="svc-knows">
+          <span class="knows-yes">✓ Active set of ballot IDs, encrypted sums</span><br>
+          <span class="knows-no">✗ No voter identity — receives only ballot IDs</span>
+        </div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--l2">🛡️</div>
+          <div><div class="svc-name">Verification Service</div><div class="svc-tech">Go — 3-of-5 threshold return codes</div></div>
+        </div>
+        <div class="svc-desc">Generates per-session verification codes via threshold trustees. Validates blinded session tokens (RFC 9474) — authenticates extension sessions without learning voter identity.</div>
+        <div class="svc-knows">
+          <span class="knows-yes">✓ Encrypted ballot content for code derivation</span><br>
+          <span class="knows-no">✗ Blinded tokens — cannot link session to voter</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-arrow anim" style="--i:7">
+    <svg viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12"/></svg>
+    public read API — all election data openly accessible
+  </div>
+
+  <!-- Public Services -->
+  <div class="section-box anim" style="--i:8">
+    <div class="layer-label">
+      <span class="dot" style="background:var(--public)"></span>
+      <span style="color:var(--public)">Public Verification &amp; Transparency</span>
+      <span class="sublabel">— Anyone can independently verify the election</span>
+    </div>
+    <div class="services services--3">
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--public">📊</div>
+          <div><div class="svc-name">Public Dashboard</div><div class="svc-tech">TypeScript / React — CDN</div></div>
+        </div>
+        <div class="svc-desc">Live ballot count, ceremony progress, results with charts. Streams trustee contributions in real-time during the televised decryption ceremony.</div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--public">✓</div>
+          <div><div class="svc-name">Verification Portal</div><div class="svc-tech">verify.izbori.bg</div></div>
+        </div>
+        <div class="svc-desc">Enter ballot ID, receive Merkle inclusion proof. Confirms your ballot was counted without revealing contents. Inclusion only, never content.</div>
+      </div>
+      <div class="svc">
+        <div class="svc-header">
+          <div class="svc-icon svc-icon--public">⚙️</div>
+          <div><div class="svc-name">CLI Verification</div><div class="svc-tech">otvoren-vot verify all</div></div>
+        </div>
+        <div class="svc-desc">Full independent audit: rebuild Merkle tree, verify all ballot proofs, check dedup SNARK, verify partial decryptions, recompute tally from scratch.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="trust-callout anim" style="--i:9">
+    <h3>Key Principle</h3>
+    <p>No single component — and no single insider — can both identify a voter and learn how they voted. Voter identity exists only in Layer 1. Ballot content exists only in Layer 2. Network-level separation ensures that even a fully compromised service in either layer cannot breach the other.</p>
+  </div>
+
+  <div class="legend anim" style="--i:10">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--l1)"></div>Layer 1 — Identity</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--l2)"></div>Layer 2 — Ballots</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--voter)"></div>Voter Interfaces</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--public)"></div>Public Services</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--red)"></div>Network Isolation</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div>One-time Handoff</div>
+  </div>
+
+</div>
+</body>
+</html>
