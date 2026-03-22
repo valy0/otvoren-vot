@@ -110,12 +110,12 @@ otvoren-vot/
 ├── extension/           # TypeScript — browser verification extension
 ├── machine/             # Go — voting machine embedded software
 ├── admin/               # Python FastAPI — election management
+├── pkg/                 # Go — shared libraries (jwtauth, middleware)
 ├── deploy/              # Docker Compose + configs
-├── docs/
-│   ├── architecture/    # English — technical documentation
-│   ├── protocol/        # English — cryptographic protocol specs
-│   └── cik/             # Bulgarian — legal, threat model, cost, audit, certification
-└── specs/               # Design specs and decisions
+└── docs/
+    ├── architecture/    # English — technical documentation
+    ├── protocol/        # English — cryptographic protocol specs
+    └── cik/             # Bulgarian — legal, threat model, cost, audit, certification
 ```
 
 ---
