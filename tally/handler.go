@@ -286,6 +286,8 @@ func (h *CeremonyHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 func (h *CeremonyHandler) handlePartialDecryption(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+
 	var req partialDecryptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", "failed to parse request body")

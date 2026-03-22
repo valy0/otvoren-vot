@@ -23,6 +23,8 @@ type VerificationHandler struct {
 // In dev mode, codes are generated immediately using devSecret.
 // In prod mode, the session awaits trustee share submission.
 func (h *VerificationHandler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<16) // 64 KB
+
 	sess, err := h.sessions.Create(h.threshold)
 	if err != nil {
 		http.Error(w, "failed to create session", http.StatusInternalServerError)
@@ -52,6 +54,8 @@ func (h *VerificationHandler) HandleCreateSession(w http.ResponseWriter, r *http
 // HandleSubmitShare handles POST /internal/v1/shares.
 // Accepts a trustee's key share and triggers code generation when the threshold is met.
 func (h *VerificationHandler) HandleSubmitShare(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<16) // 64 KB
+
 	var req struct {
 		SessionID    string `json:"session_id"`
 		TrusteeIndex int    `json:"trustee_index"`
@@ -131,6 +135,8 @@ func (h *VerificationHandler) HandleSubmitShare(w http.ResponseWriter, r *http.R
 // HandleVerify handles POST /api/v1/verify.
 // Returns the return code for an encrypted ballot.
 func (h *VerificationHandler) HandleVerify(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<16) // 64 KB
+
 	var req struct {
 		SessionID       string          `json:"session_id"`
 		EncryptedBallot json.RawMessage `json:"encrypted_ballot"`
