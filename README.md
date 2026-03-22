@@ -36,7 +36,7 @@ The system defends against client-side malware through a mandatory browser exten
 
 The system uses a strict two-layer architecture that enforces separation between identity and ballot data at the network level. No single component can both identify a voter and learn how they voted.
 
-<a href="docs/diagrams/otvoren-vot-architecture.html">
+<a href="https://valy0.github.io/otvoren-vot/diagrams/otvoren-vot-architecture.html">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.png">
   <img src="docs/images/architecture-light.png" alt="Two-Layer System Architecture">
@@ -53,7 +53,7 @@ The system uses a strict two-layer architecture that enforces separation between
 
 **Online Voting Flow**
 
-<a href="docs/diagrams/otvoren-vot-voting-flow.html">
+<a href="https://valy0.github.io/otvoren-vot/diagrams/otvoren-vot-voting-flow.html">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/voting-flow-dark.png">
   <img src="docs/images/voting-flow-light.png" alt="Online Voting Flow">
@@ -67,7 +67,7 @@ From eAuth 2.0 authentication through client-side encryption, identity stripping
 
 **Decryption Ceremony**
 
-<a href="docs/diagrams/otvoren-vot-ceremony.html">
+<a href="https://valy0.github.io/otvoren-vot/diagrams/otvoren-vot-ceremony.html">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/ceremony-dark.png">
   <img src="docs/images/ceremony-light.png" alt="Decryption Ceremony">
@@ -82,7 +82,7 @@ Nationally televised ceremony: 9 trustees with HSMs, ZK dedup proof, homomorphic
 
 **Verification & Trust Chain**
 
-<a href="docs/diagrams/otvoren-vot-verification.html">
+<a href="https://valy0.github.io/otvoren-vot/diagrams/otvoren-vot-verification.html">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/verification-dark.png">
   <img src="docs/images/verification-light.png" alt="Verification & Trust Chain">
@@ -91,7 +91,7 @@ Nationally televised ceremony: 9 trustees with HSMs, ZK dedup proof, homomorphic
 
 Three levels of verification (immediate return codes, individual inclusion check, full independent audit) backed by four cryptographic proofs (ballot validity, deduplication SNARK, partial decryption, tally correctness).
 
-> **Interactive versions:** The images above link to self-contained HTML pages with full detail. Clone the repo and open them in a browser, or browse them in [`docs/diagrams/`](docs/diagrams/).
+> **Interactive versions:** The images above link to self-contained HTML pages hosted on [GitHub Pages](https://valy0.github.io/otvoren-vot/diagrams/) with full detail.
 
 ---
 
