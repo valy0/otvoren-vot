@@ -1,10 +1,12 @@
 // Background service worker for Отворен вот verification extension
 // Communicates with the Verification Service (Layer 2) independently from page JS
 
-// In production, this MUST be https://verify.izbori.bg
-// Using localhost for development only
-const VERIFICATION_URL = 'http://localhost:8084'
-// TODO: Load from extension storage or manifest for production deployment
+const DEFAULT_URL = 'https://verify.izbori.bg'
+
+async function getVerificationURL() {
+  const result = await chrome.storage.local.get('verificationUrl')
+  return result.verificationUrl || DEFAULT_URL
+}
 
 let currentSession = null
 
@@ -32,7 +34,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function startSession() {
   try {
-    const res = await fetch(`${VERIFICATION_URL}/api/v1/session`, {
+    const verificationUrl = await getVerificationURL()
+    const res = await fetch(`${verificationUrl}/api/v1/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     })
@@ -58,7 +61,8 @@ async function verifyBallot(encryptedBallot) {
     return { success: false, error: 'No active session' }
   }
   try {
-    const res = await fetch(`${VERIFICATION_URL}/api/v1/verify`, {
+    const verificationUrl = await getVerificationURL()
+    const res = await fetch(`${verificationUrl}/api/v1/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

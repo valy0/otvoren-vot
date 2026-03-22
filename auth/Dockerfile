@@ -16,8 +16,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /auth .
 # Runtime stage
 FROM alpine:3.20
 
+RUN addgroup -S app && adduser -S app -G app
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /auth /usr/local/bin/auth
+
+USER app
 
 EXPOSE 8082
 

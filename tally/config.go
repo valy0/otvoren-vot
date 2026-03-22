@@ -10,6 +10,9 @@ type Config struct {
 	TrusteeKeysPath  string
 	CeremonyStateDir string
 	ElectionID       string
+	TLSCertPath      string
+	TLSKeyPath       string
+	CACertPath       string
 }
 
 // LoadConfig reads configuration from environment variables with sensible
@@ -22,6 +25,9 @@ func LoadConfig() *Config {
 		TrusteeKeysPath:  envOr("TRUSTEE_VERIFICATION_KEYS", ""),
 		CeremonyStateDir: envOr("CEREMONY_STATE_DIR", "/var/lib/ceremony"),
 		ElectionID:       os.Getenv("ELECTION_ID"),
+		TLSCertPath:      envOr("TLS_CERT_PATH", ""),
+		TLSKeyPath:       envOr("TLS_KEY_PATH", ""),
+		CACertPath:       envOr("CA_CERT_PATH", ""),
 	}
 }
 

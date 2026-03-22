@@ -17,8 +17,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /verification .
 # Runtime stage
 FROM alpine:3.20
 
+RUN addgroup -S app && adduser -S app -G app
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /verification /usr/local/bin/verification
+
+USER app
 
 EXPOSE 8084
 

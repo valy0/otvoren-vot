@@ -2,10 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,7 +35,7 @@ func main() {
 	ctx := context.Background()
 
 	// Connect to PostgreSQL
-	s, err := store.New(ctx, cfg.DatabaseURL)
+	s, err := store.New(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBMinConns)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -52,9 +57,20 @@ func main() {
 	}
 	slog.Info("board initialized", "existing_ballots", b.Size())
 
-	// Create signer (dev key for now)
-	signer := board.NewSigner(nil)
-	slog.Info("root signer initialized (dev key)")
+	// Create signer
+	var signer *board.Signer
+	if cfg.SigningKeyPath != "" {
+		key, err := loadECDSAKey(cfg.SigningKeyPath)
+		if err != nil {
+			slog.Error("failed to load signing key", "error", err)
+			os.Exit(1)
+		}
+		signer = board.NewSigner(key)
+		slog.Info("root signer initialized from key file", "path", cfg.SigningKeyPath)
+	} else {
+		signer = board.NewSigner(nil)
+		slog.Warn("root signer using ephemeral dev key — NOT FOR PRODUCTION")
+	}
 
 	// Start periodic root signing (every 60 seconds)
 	go func() {
@@ -74,8 +90,14 @@ func main() {
 		}
 	}()
 
+	// Parse allowed CORS origins
+	origins := strings.Split(cfg.AllowedOrigins, ",")
+	for i, o := range origins {
+		origins[i] = strings.TrimSpace(o)
+	}
+
 	// Create HTTP router
-	router := api.NewRouter(b, cfg.InternalAPIKey)
+	router := api.NewRouter(b, cfg.InternalAPIKey, origins)
 
 	// Create server
 	srv := &http.Server{
@@ -97,10 +119,34 @@ func main() {
 		srv.Shutdown(shutdownCtx)
 	}()
 
-	slog.Info("bulletin board listening", "addr", cfg.ListenAddr)
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		slog.Error("server error", "error", err)
+	var listenErr error
+	if cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
+		slog.Info("starting HTTPS server", "addr", cfg.ListenAddr)
+		listenErr = srv.ListenAndServeTLS(cfg.TLSCertPath, cfg.TLSKeyPath)
+	} else {
+		slog.Warn("starting HTTP server (no TLS configured)", "addr", cfg.ListenAddr)
+		listenErr = srv.ListenAndServe()
+	}
+	if listenErr != nil && listenErr != http.ErrServerClosed {
+		slog.Error("server error", "error", listenErr)
 		os.Exit(1)
 	}
 	slog.Info("server stopped")
+}
+
+// loadECDSAKey reads a PEM-encoded ECDSA P-256 private key from a file.
+func loadECDSAKey(path string) (*ecdsa.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read key file: %w", err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block found in %s", path)
+	}
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse EC private key: %w", err)
+	}
+	return key, nil
 }

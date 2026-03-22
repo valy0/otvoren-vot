@@ -23,7 +23,7 @@ func testDatabaseURL() string {
 func setupBoard(t *testing.T) *Board {
 	t.Helper()
 	ctx := context.Background()
-	s, err := store.New(ctx, testDatabaseURL())
+	s, err := store.New(ctx, testDatabaseURL(), 25, 5)
 	if err != nil {
 		t.Skipf("PostgreSQL not available: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestSealPreventsAppend(t *testing.T) {
 
 func TestSealPersistsAcrossRestart(t *testing.T) {
 	ctx := context.Background()
-	s, err := store.New(ctx, testDatabaseURL())
+	s, err := store.New(ctx, testDatabaseURL(), 25, 5)
 	if err != nil {
 		t.Skipf("PostgreSQL not available: %v", err)
 	}

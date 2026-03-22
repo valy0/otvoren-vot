@@ -86,12 +86,20 @@ func main() {
 		srv.Close()
 	}()
 
-	slog.Info("verification service listening",
-		"addr", cfg.ListenAddr, "dev_mode", cfg.DevMode,
-		"threshold", cfg.TrusteeThreshold, "total", cfg.TrusteeTotal,
-		"parties", len(parties))
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		slog.Error("server error", "error", err)
+	var listenErr error
+	if cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
+		slog.Info("starting HTTPS server", "addr", cfg.ListenAddr, "dev_mode", cfg.DevMode,
+			"threshold", cfg.TrusteeThreshold, "total", cfg.TrusteeTotal,
+			"parties", len(parties))
+		listenErr = srv.ListenAndServeTLS(cfg.TLSCertPath, cfg.TLSKeyPath)
+	} else {
+		slog.Warn("starting HTTP server (no TLS configured)", "addr", cfg.ListenAddr, "dev_mode", cfg.DevMode,
+			"threshold", cfg.TrusteeThreshold, "total", cfg.TrusteeTotal,
+			"parties", len(parties))
+		listenErr = srv.ListenAndServe()
+	}
+	if listenErr != nil && listenErr != http.ErrServerClosed {
+		slog.Error("server error", "error", listenErr)
 		os.Exit(1)
 	}
 }

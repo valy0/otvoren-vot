@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -101,6 +104,21 @@ func main() {
 	}
 
 	httpClient := &http.Client{Timeout: 3 * time.Second}
+	if cfg.CACertPath != "" {
+		caCert, err := os.ReadFile(cfg.CACertPath)
+		if err != nil {
+			log.Fatalf("failed to read CA cert: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			log.Fatal("failed to parse CA cert")
+		}
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: caCertPool,
+			},
+		}
+	}
 
 	handler := NewCollectionHandler(
 		voterStore, egnHMACKey, cfg.BulletinBoardURL, apiKey, activeSetKey, cfg.OverrideReportDir,
@@ -139,9 +157,16 @@ func main() {
 		srv.Close()
 	}()
 
-	slog.Info("collection server listening", "addr", cfg.ListenAddr, "bulletin_board", cfg.BulletinBoardURL)
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		slog.Error("server error", "error", err)
+	var listenErr error
+	if cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
+		slog.Info("starting HTTPS server", "addr", cfg.ListenAddr, "bulletin_board", cfg.BulletinBoardURL)
+		listenErr = srv.ListenAndServeTLS(cfg.TLSCertPath, cfg.TLSKeyPath)
+	} else {
+		slog.Warn("starting HTTP server (no TLS configured)", "addr", cfg.ListenAddr, "bulletin_board", cfg.BulletinBoardURL)
+		listenErr = srv.ListenAndServe()
+	}
+	if listenErr != nil && listenErr != http.ErrServerClosed {
+		slog.Error("server error", "error", listenErr)
 		os.Exit(1)
 	}
 }

@@ -14,6 +14,9 @@ type Config struct {
 	DevAuth           bool
 	AuthJWTPublicKey  string
 	SessionAPIKey     string
+	TLSCertPath       string
+	TLSKeyPath        string
+	CACertPath        string
 }
 
 func LoadConfig() *Config {
@@ -29,6 +32,9 @@ func LoadConfig() *Config {
 		DevAuth:           os.Getenv("COLLECTION_DEV_AUTH") == "true",
 		AuthJWTPublicKey:  envOr("AUTH_JWT_PUBLIC_KEY", ""),
 		SessionAPIKey:     envOr("SESSION_API_KEY", ""),
+		TLSCertPath:       envOr("TLS_CERT_PATH", ""),
+		TLSKeyPath:        envOr("TLS_KEY_PATH", ""),
+		CACertPath:        envOr("CA_CERT_PATH", ""),
 	}
 }
 

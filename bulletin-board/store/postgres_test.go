@@ -18,7 +18,7 @@ func testDatabaseURL() string {
 func setupStore(t *testing.T) *Store {
 	t.Helper()
 	ctx := context.Background()
-	s, err := New(ctx, testDatabaseURL())
+	s, err := New(ctx, testDatabaseURL(), 25, 5)
 	if err != nil {
 		t.Skipf("PostgreSQL not available: %v", err)
 	}

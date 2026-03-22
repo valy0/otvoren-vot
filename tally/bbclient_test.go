@@ -28,7 +28,7 @@ func TestIsSealed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewBBClient(srv.URL)
+	client := NewBBClient(srv.URL, nil)
 	sealed, err := client.IsSealed(context.Background())
 	if err != nil {
 		t.Fatalf("IsSealed() error: %v", err)
@@ -51,7 +51,7 @@ func TestIsNotSealed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewBBClient(srv.URL)
+	client := NewBBClient(srv.URL, nil)
 	sealed, err := client.IsSealed(context.Background())
 	if err != nil {
 		t.Fatalf("IsSealed() error: %v", err)
@@ -104,7 +104,7 @@ func TestFetchAllBallots(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewBBClient(srv.URL)
+	client := NewBBClient(srv.URL, nil)
 	ballots, err := client.FetchAllBallots(context.Background())
 	if err != nil {
 		t.Fatalf("FetchAllBallots() error: %v", err)
@@ -139,7 +139,7 @@ func TestFetchAllBallotsEmpty(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewBBClient(srv.URL)
+	client := NewBBClient(srv.URL, nil)
 	ballots, err := client.FetchAllBallots(context.Background())
 	if err != nil {
 		t.Fatalf("FetchAllBallots() error: %v", err)

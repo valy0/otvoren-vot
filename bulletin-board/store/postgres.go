@@ -6,10 +6,13 @@ import (
 	"embed"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,8 +44,14 @@ type Store struct {
 }
 
 // New creates a new Store connected to the given database URL.
-func New(ctx context.Context, databaseURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+func New(ctx context.Context, databaseURL string, maxConns, minConns int32) (*Store, error) {
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database config: %w", err)
+	}
+	cfg.MaxConns = maxConns
+	cfg.MinConns = minConns
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
@@ -60,6 +69,8 @@ func (s *Store) Close() {
 // RunMigrations executes SQL migration files that have not yet been applied.
 // It tracks applied migrations in a schema_migrations table, skipping any
 // migration whose filename has already been recorded.
+// An advisory lock prevents concurrent instances from racing on migrations,
+// and each migration runs inside its own transaction for atomicity.
 func (s *Store) RunMigrations(ctx context.Context) error {
 	// Ensure the schema_migrations tracking table exists.
 	const createTrackingTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -70,36 +81,50 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 		return fmt.Errorf("create schema_migrations table: %w", err)
 	}
 
+	// Acquire an advisory lock so only one process runs migrations at a time.
+	if _, err := s.pool.Exec(ctx, `SELECT pg_advisory_lock(42)`); err != nil {
+		return fmt.Errorf("acquire advisory lock: %w", err)
+	}
+	defer s.pool.Exec(context.Background(), `SELECT pg_advisory_unlock(42)`)
+
 	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read migrations dir: %w", err)
 	}
 	for _, entry := range entries {
-		version := entry.Name()
+		name := entry.Name()
 
 		// Check whether this migration has already been applied.
 		var exists bool
 		if err := s.pool.QueryRow(ctx,
 			`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = $1)`,
-			version).Scan(&exists); err != nil {
-			return fmt.Errorf("check migration %s: %w", version, err)
+			name).Scan(&exists); err != nil {
+			return fmt.Errorf("check migration %s: %w", name, err)
 		}
 		if exists {
 			continue
 		}
 
-		sql, err := migrations.ReadFile("migrations/" + version)
+		sql, err := migrations.ReadFile("migrations/" + name)
 		if err != nil {
-			return fmt.Errorf("read migration %s: %w", version, err)
-		}
-		if _, err := s.pool.Exec(ctx, string(sql)); err != nil {
-			return fmt.Errorf("execute migration %s: %w", version, err)
+			return fmt.Errorf("read migration %s: %w", name, err)
 		}
 
-		// Record the migration as applied.
-		if _, err := s.pool.Exec(ctx,
-			`INSERT INTO schema_migrations (version) VALUES ($1)`, version); err != nil {
-			return fmt.Errorf("record migration %s: %w", version, err)
+		// Run the migration and its version record inside a transaction.
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin tx for migration %s: %w", name, err)
+		}
+		defer tx.Rollback(ctx)
+
+		if _, err := tx.Exec(ctx, string(sql)); err != nil {
+			return fmt.Errorf("migration %s: %w", name, err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, name); err != nil {
+			return fmt.Errorf("migration %s record: %w", name, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("migration %s commit: %w", name, err)
 		}
 	}
 	return nil
@@ -110,14 +135,31 @@ func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool
 }
 
-// InsertBallot inserts a new ballot record. Returns the assigned position.
+// InsertBallot inserts a new ballot record.
+// Returns board.ErrDuplicateBallot on ballot_id unique violation,
+// or ErrPositionConflict on position unique violation.
 func (s *Store) InsertBallot(ctx context.Context, rec *BallotRecord) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO ballots (ballot_id, encrypted_ballot, zk_proofs, position, merkle_root_sha)
 		 VALUES ($1, $2, $3, $4, $5)`,
 		rec.BallotID, rec.EncryptedBallot, rec.ZKProofs, rec.Position, rec.MerkleRootSHA)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if strings.Contains(pgErr.ConstraintName, "ballot") {
+				return ErrDuplicateBallot
+			}
+			return ErrPositionConflict
+		}
+	}
 	return err
 }
+
+// ErrDuplicateBallot is returned when a ballot ID already exists.
+var ErrDuplicateBallot = errors.New("ballot ID already exists")
+
+// ErrPositionConflict is returned when a position is already taken (retry needed).
+var ErrPositionConflict = errors.New("position conflict")
 
 // GetBallot retrieves a ballot by ID.
 func (s *Store) GetBallot(ctx context.Context, ballotID string) (*BallotRecord, error) {

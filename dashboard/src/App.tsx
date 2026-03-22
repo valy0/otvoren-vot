@@ -29,9 +29,11 @@ export default function App() {
   }, [API_URL])
 
   return (
-    <div className="container">
-      <h1>Отворен вот — Табло</h1>
-      <p>Публично табло за наблюдение на изборния процес</p>
+    <main className="container">
+      <header>
+        <h1>Отворен вот — Табло</h1>
+        <p>Публично табло за наблюдение на изборния процес</p>
+      </header>
 
       {error && <div className="error">{error}</div>}
 
@@ -66,6 +68,6 @@ export default function App() {
         />
         <button className="btn-primary">Провери</button>
       </div>
-    </div>
+    </main>
   )
 }

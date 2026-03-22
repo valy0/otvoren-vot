@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -43,7 +46,26 @@ func main() {
 	slog.Info("loaded trustee keys", "count", len(trusteeKeys.Keys))
 
 	// --- Create BB client ---
-	bbClient := NewBBClient(cfg.BulletinBoardURL)
+	var bbHTTPClient *http.Client
+	if cfg.CACertPath != "" {
+		caCert, err := os.ReadFile(cfg.CACertPath)
+		if err != nil {
+			log.Fatalf("failed to read CA cert: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			log.Fatal("failed to parse CA cert")
+		}
+		bbHTTPClient = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: caCertPool,
+				},
+			},
+		}
+	}
+	bbClient := NewBBClient(cfg.BulletinBoardURL, bbHTTPClient)
 
 	// --- Create ceremony handler (includes crash recovery) ---
 	handler, err := NewCeremonyHandler(bbClient, trusteeKeys, cfg.ElectionID, cfg.CeremonyStateDir)
@@ -82,9 +104,16 @@ func main() {
 		srv.Close()
 	}()
 
-	slog.Info("tally service listening", "addr", cfg.ListenAddr)
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		slog.Error("server error", "error", err)
+	var listenErr error
+	if cfg.TLSCertPath != "" && cfg.TLSKeyPath != "" {
+		slog.Info("starting HTTPS server", "addr", cfg.ListenAddr)
+		listenErr = srv.ListenAndServeTLS(cfg.TLSCertPath, cfg.TLSKeyPath)
+	} else {
+		slog.Warn("starting HTTP server (no TLS configured)", "addr", cfg.ListenAddr)
+		listenErr = srv.ListenAndServe()
+	}
+	if listenErr != nil && listenErr != http.ErrServerClosed {
+		slog.Error("server error", "error", listenErr)
 		os.Exit(1)
 	}
 }

@@ -10,6 +10,8 @@ type Config struct {
 	JWTPrivateKey string // file path to Ed25519 PEM
 	ElectionID    string
 	SessionAPIKey string
+	TLSCertPath   string
+	TLSKeyPath    string
 }
 
 // LoadConfig reads configuration from the environment.
@@ -21,6 +23,8 @@ func LoadConfig() *Config {
 		JWTPrivateKey: envOr("AUTH_JWT_PRIVATE_KEY", ""),
 		ElectionID:    envOr("ELECTION_ID", "00000000-0000-0000-0000-000000000000"),
 		SessionAPIKey: envOr("SESSION_API_KEY", ""),
+		TLSCertPath:   envOr("TLS_CERT_PATH", ""),
+		TLSKeyPath:    envOr("TLS_KEY_PATH", ""),
 	}
 }
 

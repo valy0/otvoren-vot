@@ -104,7 +104,7 @@ func mockBB(t *testing.T, sealed bool, ballots []ceremony.SerializedBallot) *htt
 func newHandlerWithMockBB(t *testing.T, bbServer *httptest.Server, trusteeKeys *TrusteeKeySet) (*CeremonyHandler, *http.ServeMux) {
 	t.Helper()
 
-	bbClient := NewBBClient(bbServer.URL)
+	bbClient := NewBBClient(bbServer.URL, nil)
 	stateDir := t.TempDir()
 
 	handler, err := NewCeremonyHandler(bbClient, trusteeKeys, "test-election", stateDir)

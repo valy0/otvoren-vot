@@ -2,7 +2,7 @@ package merkle
 
 import (
 	"crypto/sha256"
-	"errors"
+	"fmt"
 )
 
 // Tree is an append-only SHA-256 Merkle tree with O(log n) incremental updates.
@@ -91,35 +91,37 @@ type ProofNode struct {
 }
 
 // InclusionProof returns the Merkle proof for the leaf at index.
+// It walks the pre-computed levels directly, making it O(log n) without
+// rebuilding the tree.
 func (t *Tree) InclusionProof(index int) ([]ProofNode, error) {
-	if index < 0 || index >= len(t.leaves) {
-		return nil, errors.New("index out of range")
+	if len(t.levels) == 0 || index < 0 || index >= len(t.levels[0]) {
+		n := 0
+		if len(t.levels) > 0 {
+			n = len(t.levels[0])
+		}
+		return nil, fmt.Errorf("index %d out of range [0, %d)", index, n)
 	}
-	if len(t.leaves) == 1 {
+	if len(t.levels[0]) == 1 {
 		return nil, nil
-	}
-
-	hashes := make([][]byte, len(t.leaves))
-	for i, leaf := range t.leaves {
-		hashes[i] = hashLeaf(leaf)
 	}
 
 	var proof []ProofNode
 	idx := index
-	for len(hashes) > 1 {
-		if len(hashes)%2 != 0 {
-			hashes = append(hashes, hashes[len(hashes)-1])
-		}
+	for level := 0; level < len(t.levels)-1; level++ {
 		sibling := idx ^ 1
-		proof = append(proof, ProofNode{
-			Hash:   hashes[sibling],
-			IsLeft: sibling < idx,
-		})
-		next := make([][]byte, len(hashes)/2)
-		for i := 0; i < len(hashes); i += 2 {
-			next[i/2] = hashPair(hashes[i], hashes[i+1])
+		if sibling < len(t.levels[level]) {
+			proof = append(proof, ProofNode{
+				Hash:   t.levels[level][sibling],
+				IsLeft: sibling < idx,
+			})
+		} else {
+			// Odd-length level: the unpaired node's sibling is itself
+			// (matches the duplicate-last-element strategy used in Append).
+			proof = append(proof, ProofNode{
+				Hash:   t.levels[level][idx],
+				IsLeft: false,
+			})
 		}
-		hashes = next
 		idx /= 2
 	}
 	return proof, nil

@@ -204,46 +204,54 @@ export default function App() {
 
   if (state.phase === 'loading') {
     return (
-      <div className="container">
-        <h1>Отворен вот</h1>
-        <p>Зарежда се изборната конфигурация…</p>
+      <main className="container">
+        <header>
+          <h1>Отворен вот</h1>
+          <p>Зарежда се изборната конфигурация…</p>
+        </header>
         <div className="spinner" aria-label="Зареждане" role="status" />
-      </div>
+      </main>
     )
   }
 
   if (state.phase === 'error') {
     return (
-      <div className="container">
-        <h1>Грешка</h1>
-        <p className="error-message" role="alert">{state.message}</p>
+      <main className="container">
+        <header>
+          <h1>Грешка</h1>
+          <p className="error-message" role="alert">{state.message}</p>
+        </header>
         {state.recoverable && (
           <button onClick={handleRetry} className="btn-primary">
             Опитай отново
           </button>
         )}
-      </div>
+      </main>
     )
   }
 
   if (state.phase === 'auth') {
     return (
-      <div className="container">
-        <h1>Отворен вот</h1>
-        <p>Система за електронно гласуване</p>
+      <main className="container">
+        <header>
+          <h1>Отворен вот</h1>
+          <p>Система за електронно гласуване</p>
+        </header>
         <button onClick={handleAuth} className="btn-primary">
           Гласувай онлайн
         </button>
         <p className="note">Ще бъдете пренасочени към eAuth за удостоверяване</p>
-      </div>
+      </main>
     )
   }
 
   if (state.phase === 'ballot') {
     const { config } = state
     return (
-      <div className="container">
-        <h1>Изберете партия</h1>
+      <main className="container">
+        <header>
+          <h1>Изберете партия</h1>
+        </header>
         <fieldset className="party-grid">
           <legend className="sr-only">Избор на партия</legend>
           {config.parties.map((party, i) => (
@@ -277,7 +285,7 @@ export default function App() {
             Потвърди избора
           </button>
         )}
-      </div>
+      </main>
     )
   }
 
@@ -286,11 +294,13 @@ export default function App() {
     const isEncrypting = encrypted === null
 
     return (
-      <div className="container">
-        <h1>Потвърждение</h1>
-        <p className="choice-display">
-          Вие избрахте: <strong>{choice.partyName}</strong>
-        </p>
+      <main className="container">
+        <header>
+          <h1>Потвърждение</h1>
+          <p className="choice-display">
+            Вие избрахте: <strong>{choice.partyName}</strong>
+          </p>
+        </header>
         {isEncrypting ? (
           <p className="encrypt-status" aria-live="polite">
             Генерира се криптирана бюлетина…
@@ -323,24 +333,28 @@ export default function App() {
             Промени избора
           </button>
         </div>
-      </div>
+      </main>
     )
   }
 
   if (state.phase === 'submitting') {
     return (
-      <div className="container">
-        <h1>Подаване на бюлетина…</h1>
+      <main className="container">
+        <header>
+          <h1>Подаване на бюлетина…</h1>
+        </header>
         <div className="spinner" aria-label="Подаване" role="status" />
-      </div>
+      </main>
     )
   }
 
   // phase === 'done'
   const { receipt } = state
   return (
-    <div className="container">
-      <h1>Гласът ви е записан</h1>
+    <main className="container">
+      <header>
+        <h1>Гласът ви е записан</h1>
+      </header>
       {receipt.isOverride && (
         <p className="override-notice" role="status">
           Бюлетината е записана като замяна на предишен глас.
@@ -355,6 +369,6 @@ export default function App() {
         Запазете този идентификатор, за да проверите включването на бюлетината
         на verify.izbori.bg
       </p>
-    </div>
+    </main>
   )
 }

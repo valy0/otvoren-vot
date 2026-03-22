@@ -30,13 +30,17 @@ type BBClient struct {
 }
 
 // NewBBClient creates a BBClient pointing at the given Bulletin Board base URL.
-func NewBBClient(baseURL string) *BBClient {
-	return &BBClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
+// If httpClient is nil, a default client with a 30-second timeout is used.
+func NewBBClient(baseURL string, httpClient *http.Client) *BBClient {
+	if httpClient == nil {
+		httpClient = &http.Client{
 			Timeout: 30 * time.Second,
-		},
-		pageLimit: defaultPageLimit,
+		}
+	}
+	return &BBClient{
+		baseURL:    baseURL,
+		httpClient: httpClient,
+		pageLimit:  defaultPageLimit,
 	}
 }
 

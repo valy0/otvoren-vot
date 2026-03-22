@@ -8,7 +8,7 @@ import (
 )
 
 // NewRouter creates the HTTP handler with all routes.
-func NewRouter(b *board.Board, internalAPIKey string) http.Handler {
+func NewRouter(b *board.Board, internalAPIKey string, allowedOrigins []string) http.Handler {
 	mux := http.NewServeMux()
 
 	// Public read endpoints (with CORS)
@@ -26,8 +26,9 @@ func NewRouter(b *board.Board, internalAPIKey string) http.Handler {
 	internalMux.HandleFunc("POST /internal/v1/ballots", requireAPIKey(internalAPIKey, handleSubmitBallot(b)))
 
 	// Combine: public gets CORS + logging, internal gets logging only
-	mux.Handle("/api/", withCORS(withLogging(publicMux)))
-	mux.Handle("/health", withCORS(withLogging(publicMux)))
+	cors := withCORS(allowedOrigins)
+	mux.Handle("/api/", cors(withLogging(publicMux)))
+	mux.Handle("/health", cors(withLogging(publicMux)))
 	mux.Handle("/internal/", withLogging(internalMux))
 
 	return mux

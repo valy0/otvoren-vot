@@ -16,8 +16,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /bulletin-board .
 # Runtime stage
 FROM alpine:3.20
 
+RUN addgroup -S app && adduser -S app -G app
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /bulletin-board /usr/local/bin/bulletin-board
+
+USER app
 
 EXPOSE 8080
 

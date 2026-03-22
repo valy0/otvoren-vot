@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrBoardSealed    = errors.New("board is sealed")
+	ErrBoardSealed     = errors.New("board is sealed")
 	ErrDuplicateBallot = errors.New("ballot ID already exists")
+	ErrPositionConflict = errors.New("position conflict")
 )
 
 // Board manages the bulletin board state.
@@ -65,21 +66,15 @@ type AppendResult struct {
 }
 
 // AppendBallot validates proofs and appends a ballot to the board.
+// The DB write happens first (with PK/unique constraints as the authoritative
+// duplicate and position guards), and the in-memory Merkle tree is updated
+// only after the DB confirms success.
 func (b *Board) AppendBallot(ctx context.Context, ballotID string, encryptedBallot, zkProofs json.RawMessage) (*AppendResult, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if b.sealed {
 		return nil, ErrBoardSealed
-	}
-
-	// Check duplicate
-	existing, err := b.store.GetBallot(ctx, ballotID)
-	if err != nil {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, ErrDuplicateBallot
 	}
 
 	// Validate ZK proofs if validator is set
@@ -89,30 +84,45 @@ func (b *Board) AppendBallot(ctx context.Context, ballotID string, encryptedBall
 		}
 	}
 
-	// Get next position
-	maxPos, err := b.store.GetMaxPosition(ctx)
-	if err != nil {
-		return nil, err
-	}
-	position := maxPos + 1
-
 	// Canonical leaf encoding with length prefixes
 	leafData := EncodeLeaf(ballotID, encryptedBallot, zkProofs)
-	b.tree.Append(leafData)
 
-	root := hex.EncodeToString(b.tree.Root())
+	// DB-first: insert with position retry on conflict.
+	const maxRetries = 3
+	var position int64
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		maxPos, err := b.store.GetMaxPosition(ctx)
+		if err != nil {
+			return nil, err
+		}
+		position = maxPos + 1
 
-	// Store in database
-	rec := &store.BallotRecord{
-		BallotID:        ballotID,
-		EncryptedBallot: encryptedBallot,
-		ZKProofs:        zkProofs,
-		Position:        position,
-		MerkleRootSHA:   root,
-	}
-	if err := b.store.InsertBallot(ctx, rec); err != nil {
+		rec := &store.BallotRecord{
+			BallotID:        ballotID,
+			EncryptedBallot: encryptedBallot,
+			ZKProofs:        zkProofs,
+			Position:        position,
+			MerkleRootSHA:   "", // will be updated after tree append
+		}
+		err = b.store.InsertBallot(ctx, rec)
+		if err == nil {
+			break // success
+		}
+		if errors.Is(err, store.ErrDuplicateBallot) {
+			return nil, ErrDuplicateBallot
+		}
+		if errors.Is(err, store.ErrPositionConflict) {
+			if attempt == maxRetries-1 {
+				return nil, ErrPositionConflict
+			}
+			continue // retry with new position
+		}
 		return nil, err
 	}
+
+	// Tree update only after DB confirms the insert.
+	b.tree.Append(leafData)
+	root := hex.EncodeToString(b.tree.Root())
 
 	return &AppendResult{Position: position, MerkleRoot: root}, nil
 }
