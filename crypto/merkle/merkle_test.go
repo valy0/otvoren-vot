@@ -2,7 +2,9 @@ package merkle
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
+	"time"
 )
 
 func TestEmptyTree(t *testing.T) {
@@ -98,4 +100,63 @@ func TestOutOfRangeIndex(t *testing.T) {
 	if err == nil {
 		t.Fatal("out-of-range index should return error")
 	}
+}
+
+// TestIncrementalRootMatchesFull appends 100 random leaves one at a time and
+// verifies that the incremental root matches a full rebuild at every step.
+func TestIncrementalRootMatchesFull(t *testing.T) {
+	tree := New()
+	var allLeaves [][]byte
+
+	for i := range 100 {
+		leaf := make([]byte, 32)
+		if _, err := rand.Read(leaf); err != nil {
+			t.Fatal(err)
+		}
+		allLeaves = append(allLeaves, leaf)
+		tree.Append(leaf)
+
+		// Compute the expected root via the original full-rebuild algorithm.
+		hashes := make([][]byte, len(allLeaves))
+		for j, l := range allLeaves {
+			hashes[j] = hashLeaf(l)
+		}
+		want := computeRoot(hashes)
+
+		got := tree.Root()
+		if !bytes.Equal(got, want) {
+			t.Fatalf("root mismatch at %d leaves", i+1)
+		}
+	}
+}
+
+// TestLargeTree appends 10 000 leaves and asserts that the root is computed
+// well within a reasonable time budget.
+func TestLargeTree(t *testing.T) {
+	const n = 10_000
+	tree := New()
+
+	start := time.Now()
+	for i := range n {
+		tree.Append([]byte{byte(i >> 8), byte(i)})
+	}
+	root := tree.Root()
+	elapsed := time.Since(start)
+
+	if root == nil {
+		t.Fatal("expected non-nil root")
+	}
+	if tree.Size() != n {
+		t.Fatalf("expected size %d, got %d", n, tree.Size())
+	}
+
+	// The race detector adds ~5-10x overhead; only enforce the tight
+	// budget in normal builds.
+	if !raceEnabled {
+		const budget = 100 * time.Millisecond
+		if elapsed > budget {
+			t.Fatalf("too slow: %v (budget %v)", elapsed, budget)
+		}
+	}
+	t.Logf("10 000 leaves: %v", elapsed)
 }
