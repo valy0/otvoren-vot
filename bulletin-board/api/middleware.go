@@ -1,7 +1,7 @@
 package api
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -11,7 +11,9 @@ func withLogging(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, sw.status, time.Since(start))
+		slog.Info("http request",
+			"method", r.Method, "path", r.URL.Path,
+			"status", sw.status, "duration", time.Since(start))
 	})
 }
 

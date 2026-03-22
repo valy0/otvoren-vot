@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,10 +15,16 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := LoadConfig()
 
 	if cfg.InternalAPIKey == "" {
-		log.Fatal("INTERNAL_API_KEY environment variable must be set")
+		slog.Error("INTERNAL_API_KEY environment variable must be set")
+		os.Exit(1)
 	}
 
 	ctx := context.Background()
@@ -26,26 +32,29 @@ func main() {
 	// Connect to PostgreSQL
 	s, err := store.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer s.Close()
 
 	// Run migrations
 	if err := s.RunMigrations(ctx); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Database migrations applied")
+	slog.Info("database migrations applied")
 
 	// Create board
 	b, err := board.New(ctx, s)
 	if err != nil {
-		log.Fatalf("Failed to initialize board: %v", err)
+		slog.Error("failed to initialize board", "error", err)
+		os.Exit(1)
 	}
-	log.Printf("Board initialized with %d existing ballots", b.Size())
+	slog.Info("board initialized", "existing_ballots", b.Size())
 
 	// Create signer (dev key for now)
 	signer := board.NewSigner(nil)
-	log.Println("Root signer initialized (dev key)")
+	slog.Info("root signer initialized (dev key)")
 
 	// Start periodic root signing (every 60 seconds)
 	go func() {
@@ -54,14 +63,14 @@ func main() {
 		for range ticker.C {
 			sr, err := signer.SignRoot(b)
 			if err != nil {
-				log.Printf("Failed to sign root: %v", err)
+				slog.Error("failed to sign root", "error", err)
 				continue
 			}
 			if err := s.InsertSignedRoot(ctx, sr.ToStoreRecord()); err != nil {
-				log.Printf("Failed to store signed root: %v", err)
+				slog.Error("failed to store signed root", "error", err)
 				continue
 			}
-			log.Printf("Signed root: %s (ballots: %d)", sr.RootSHA256, sr.BallotCount)
+			slog.Info("signed root", "root", sr.RootSHA256, "ballots", sr.BallotCount)
 		}
 	}()
 
@@ -82,15 +91,16 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("Shutting down...")
+		slog.Info("bulletin board shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		srv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("Bulletin Board listening on %s", cfg.ListenAddr)
+	slog.Info("bulletin board listening", "addr", cfg.ListenAddr)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }

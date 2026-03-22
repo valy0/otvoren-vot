@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,20 +15,28 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := LoadConfig()
 
 	// Validate configuration
 	if !cfg.DevMode && cfg.VerificationAPIKey == "" {
-		log.Fatal("VERIFICATION_API_KEY must be set in production mode")
+		slog.Error("VERIFICATION_API_KEY must be set in production mode")
+		os.Exit(1)
 	}
 	if cfg.TrusteeThreshold < 1 || cfg.TrusteeTotal < cfg.TrusteeThreshold {
-		log.Fatalf("Invalid threshold config: t=%d, n=%d", cfg.TrusteeThreshold, cfg.TrusteeTotal)
+		slog.Error("invalid threshold config", "t", cfg.TrusteeThreshold, "n", cfg.TrusteeTotal)
+		os.Exit(1)
 	}
 
 	// Load parties from JSON file or fall back to env/default
 	parties := loadParties(cfg.PartyListPath)
 	if len(parties) == 0 {
-		log.Fatal("No parties configured; set PARTY_LIST_PATH to a JSON file or provide defaults")
+		slog.Error("no parties configured; set PARTY_LIST_PATH to a JSON file or provide defaults")
+		os.Exit(1)
 	}
 
 	sessions := session.NewStore()
@@ -42,8 +50,8 @@ func main() {
 
 	// Dev mode: run a local DKG to generate a dev secret
 	if cfg.DevMode {
-		log.Printf("DEV MODE: running local DKG (%d-of-%d) for development secret",
-			cfg.TrusteeThreshold, cfg.TrusteeTotal)
+		slog.Warn("dev mode: running local DKG for development secret",
+			"threshold", cfg.TrusteeThreshold, "total", cfg.TrusteeTotal)
 		dealer := threshold.NewDealer(cfg.TrusteeThreshold, cfg.TrusteeTotal)
 		handler.devSecret = dealer.Secret()
 	}
@@ -73,15 +81,18 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("Verification service shutting down...")
+		slog.Info("verification service shutting down")
 		sessions.Stop()
 		srv.Close()
 	}()
 
-	log.Printf("Verification service listening on %s (dev_mode=%v, threshold=%d-of-%d, parties=%d)",
-		cfg.ListenAddr, cfg.DevMode, cfg.TrusteeThreshold, cfg.TrusteeTotal, len(parties))
+	slog.Info("verification service listening",
+		"addr", cfg.ListenAddr, "dev_mode", cfg.DevMode,
+		"threshold", cfg.TrusteeThreshold, "total", cfg.TrusteeTotal,
+		"parties", len(parties))
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -90,11 +101,13 @@ func loadParties(path string) []string {
 	if path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			log.Fatalf("Failed to read party list from %s: %v", path, err)
+			slog.Error("failed to read party list", "path", path, "error", err)
+			os.Exit(1)
 		}
 		var parties []string
 		if err := json.Unmarshal(data, &parties); err != nil {
-			log.Fatalf("Failed to parse party list from %s: %v", path, err)
+			slog.Error("failed to parse party list", "path", path, "error", err)
+			os.Exit(1)
 		}
 		return parties
 	}
@@ -103,7 +116,8 @@ func loadParties(path string) []string {
 	if env := os.Getenv("PARTIES"); env != "" {
 		var parties []string
 		if err := json.Unmarshal([]byte(env), &parties); err != nil {
-			log.Fatalf("Failed to parse PARTIES env: %v", err)
+			slog.Error("failed to parse PARTIES env", "error", err)
+			os.Exit(1)
 		}
 		return parties
 	}

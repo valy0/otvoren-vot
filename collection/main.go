@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,30 +18,40 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := LoadConfig()
 
 	apiKey := os.Getenv("BULLETIN_BOARD_API_KEY")
 	if apiKey == "" {
-		log.Fatal("BULLETIN_BOARD_API_KEY environment variable must be set")
+		slog.Error("BULLETIN_BOARD_API_KEY environment variable must be set")
+		os.Exit(1)
 	}
 
 	activeSetKey := os.Getenv("ACTIVE_SET_API_KEY")
 	if activeSetKey == "" {
-		log.Fatal("ACTIVE_SET_API_KEY environment variable must be set")
+		slog.Error("ACTIVE_SET_API_KEY environment variable must be set")
+		os.Exit(1)
 	}
 
 	// Dev auth safety: prevent enabling dev auth when a real database is configured.
 	if cfg.DevAuth && cfg.DatabaseURL != "" {
-		log.Fatal("COLLECTION_DEV_AUTH cannot be true when DATABASE_URL is set (production safety)")
+		slog.Error("COLLECTION_DEV_AUTH cannot be true when DATABASE_URL is set (production safety)")
+		os.Exit(1)
 	}
 	if !cfg.DevAuth && cfg.AuthJWTPublicKey == "" {
-		log.Fatal("AUTH_JWT_PUBLIC_KEY must be set when dev auth is disabled")
+		slog.Error("AUTH_JWT_PUBLIC_KEY must be set when dev auth is disabled")
+		os.Exit(1)
 	}
 	if !cfg.DevAuth && cfg.SessionAPIKey == "" {
-		log.Fatal("SESSION_API_KEY must be set when dev auth is disabled")
+		slog.Error("SESSION_API_KEY must be set when dev auth is disabled")
+		os.Exit(1)
 	}
 	if cfg.DevAuth {
-		log.Println("WARNING: Dev auth enabled — X-Voter-EGN header accepted without JWT")
+		slog.Warn("dev auth enabled, X-Voter-EGN header accepted without JWT")
 	}
 
 	// Load JWT public key (production mode only).
@@ -50,7 +60,8 @@ func main() {
 		var err error
 		jwtPubKey, err = jwtauth.LoadEd25519PublicKey(cfg.AuthJWTPublicKey)
 		if err != nil {
-			log.Fatalf("Failed to load JWT public key: %v", err)
+			slog.Error("failed to load JWT public key", "error", err)
+			os.Exit(1)
 		}
 	}
 
@@ -58,30 +69,34 @@ func main() {
 
 	egnHMACKey := []byte(cfg.EGNHMACKey)
 	if cfg.DatabaseURL != "" && cfg.EGNHMACKey == "" {
-		log.Fatal("EGN_HMAC_KEY must be set when using PostgreSQL (required to protect voter identity hashes)")
+		slog.Error("EGN_HMAC_KEY must be set when using PostgreSQL (required to protect voter identity hashes)")
+		os.Exit(1)
 	}
 	if cfg.EGNHMACKey == "" {
-		log.Println("WARNING: No EGN_HMAC_KEY set, using empty key (development only)")
+		slog.Warn("no EGN_HMAC_KEY set, using empty key (development only)")
 	}
 
 	if cfg.DatabaseURL != "" && cfg.HistoryHMACKey == "" {
-		log.Fatal("HISTORY_HMAC_KEY must be set when using PostgreSQL (required for vote history integrity)")
+		slog.Error("HISTORY_HMAC_KEY must be set when using PostgreSQL (required for vote history integrity)")
+		os.Exit(1)
 	}
 
 	var voterStore votermap.Store
 	if cfg.DatabaseURL != "" {
 		pgStore, err := store.New(ctx, cfg.DatabaseURL, cfg.ElectionID, []byte(cfg.HistoryHMACKey))
 		if err != nil {
-			log.Fatalf("Failed to connect to database: %v", err)
+			slog.Error("failed to connect to database", "error", err)
+			os.Exit(1)
 		}
 		if err := pgStore.RunMigrations(ctx); err != nil {
-			log.Fatalf("Failed to run migrations: %v", err)
+			slog.Error("failed to run migrations", "error", err)
+			os.Exit(1)
 		}
 		defer pgStore.Close()
 		voterStore = pgStore
-		log.Printf("Using PostgreSQL store (election %s)", cfg.ElectionID)
+		slog.Info("using PostgreSQL store", "election_id", cfg.ElectionID)
 	} else {
-		log.Println("WARNING: No DATABASE_URL set, using in-memory store (data will not persist across restarts)")
+		slog.Warn("no DATABASE_URL set, using in-memory store (data will not persist across restarts)")
 		voterStore = votermap.NewMemoryStore([]byte(cfg.HistoryHMACKey))
 	}
 
@@ -120,13 +135,13 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("Collection server shutting down...")
+		slog.Info("collection server shutting down")
 		srv.Close()
 	}()
 
-	log.Printf("Collection server listening on %s", cfg.ListenAddr)
-	log.Printf("Bulletin board: %s", cfg.BulletinBoardURL)
+	slog.Info("collection server listening", "addr", cfg.ListenAddr, "bulletin_board", cfg.BulletinBoardURL)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }

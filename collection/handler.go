@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -174,12 +174,12 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 		}
 		egn, err = h.resolveSession(r.Context(), claims.Subject)
 		if err != nil {
-			log.Printf("ERROR: session resolution failed: %v", err)
+			slog.Error("session resolution failed", "error", err)
 			writeError(w, http.StatusUnauthorized, "session_error", "Session not found or expired")
 			return
 		}
 		if !isValidEGN(egn) {
-			log.Printf("ERROR: auth service returned invalid EGN format")
+			slog.Error("auth service returned invalid EGN format")
 			writeError(w, http.StatusBadGateway, "invalid_session", "Auth service returned invalid identity")
 			return
 		}
@@ -207,7 +207,7 @@ func (h *CollectionHandler) HandleSubmit(w http.ResponseWriter, r *http.Request)
 	// Record in voter map (handles override)
 	prevBallotID, err := h.voterStore.Record(r.Context(), egnHash, req.BallotID, votermap.ChannelOnline, time.Now())
 	if err != nil {
-		log.Printf("ERROR: failed to record vote: %v", err)
+		slog.Error("failed to record vote", "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", "Failed to record vote")
 		return
 	}
@@ -284,7 +284,7 @@ func (h *CollectionHandler) forwardToBulletinBoard(body []byte) (*struct {
 func (h *CollectionHandler) HandleActiveSet(w http.ResponseWriter, r *http.Request) {
 	set, err := h.voterStore.ActiveSet(r.Context())
 	if err != nil {
-		log.Printf("ERROR: failed to retrieve active set: %v", err)
+		slog.Error("failed to retrieve active set", "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", "Failed to retrieve active set")
 		return
 	}
@@ -309,7 +309,7 @@ func (h *CollectionHandler) HandleOverrideReport(w http.ResponseWriter, r *http.
 			writeError(w, http.StatusNotFound, "not_generated", "Override report has not been generated yet")
 			return
 		}
-		log.Printf("ERROR: failed to read override report: %v", err)
+		slog.Error("failed to read override report", "error", err)
 		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read override report")
 		return
 	}

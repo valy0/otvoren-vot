@@ -1,25 +1,31 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/valy0/otvoren-vot/machine/ballot"
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := LoadConfig()
-	log.Printf("Voting machine starting — station %s", cfg.StationID)
+	slog.Info("voting machine starting", "station", cfg.StationID)
 
 	queue := ballot.NewQueue(cfg.DataDir)
 
 	// In production: full-screen kiosk UI
 	// For now: log the configuration
-	fmt.Printf("Station: %s\n", cfg.StationID)
-	fmt.Printf("Collection server: %s\n", cfg.CollectionURL)
-	fmt.Printf("Parties: %d\n", cfg.NumParties)
-	fmt.Printf("Data directory: %s\n", cfg.DataDir)
-	fmt.Printf("Queue size: %d\n", queue.Size())
+	slog.Info("machine configured",
+		"station", cfg.StationID,
+		"collection_url", cfg.CollectionURL,
+		"num_parties", cfg.NumParties,
+		"data_dir", cfg.DataDir,
+		"queue_size", queue.Size())
 
-	log.Println("Machine ready (CLI mode — kiosk UI not yet implemented)")
+	slog.Info("machine ready (CLI mode, kiosk UI not yet implemented)")
 }

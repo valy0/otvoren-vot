@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,30 +18,40 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := LoadConfig()
 
 	if cfg.JWTPrivateKey == "" {
-		log.Fatal("AUTH_JWT_PRIVATE_KEY must be set")
+		slog.Error("AUTH_JWT_PRIVATE_KEY must be set")
+		os.Exit(1)
 	}
 	if cfg.SessionAPIKey == "" {
-		log.Fatal("SESSION_API_KEY must be set")
+		slog.Error("SESSION_API_KEY must be set")
+		os.Exit(1)
 	}
 
 	// Load JWT signing key.
 	jwtPrivKey, err := jwtauth.LoadEd25519PrivateKey(cfg.JWTPrivateKey)
 	if err != nil {
-		log.Fatalf("Failed to load JWT private key: %v", err)
+		slog.Error("failed to load JWT private key", "error", err)
+		os.Exit(1)
 	}
 
 	// Connect to Redis.
 	ctx := context.Background()
 	opt, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
-		log.Fatalf("Invalid REDIS_URL: %v", err)
+		slog.Error("invalid REDIS_URL", "error", err)
+		os.Exit(1)
 	}
 	redisClient := redis.NewClient(opt)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Redis not reachable: %v", err)
+		slog.Error("redis not reachable", "error", err)
+		os.Exit(1)
 	}
 	defer redisClient.Close()
 
@@ -53,9 +63,10 @@ func main() {
 	var p provider.Provider
 	if cfg.MockMode {
 		p = provider.NewMockProvider()
-		log.Println("Auth service running in MOCK mode")
+		slog.Warn("auth service running in MOCK mode")
 	} else {
-		log.Fatal("Production eAuth 2.0 provider not implemented yet")
+		slog.Error("production eAuth 2.0 provider not implemented yet")
+		os.Exit(1)
 	}
 
 	authHandler := NewAuthHandler(p, sessions, rateLimiter, jwtPrivKey, cfg.ElectionID)
@@ -79,12 +90,13 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("Auth service shutting down...")
+		slog.Info("auth service shutting down")
 		srv.Close()
 	}()
 
-	log.Printf("Auth service listening on %s", cfg.ListenAddr)
+	slog.Info("auth service listening", "addr", cfg.ListenAddr)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }

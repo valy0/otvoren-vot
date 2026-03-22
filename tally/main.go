@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,23 +13,32 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	cfg := LoadConfig()
 
 	// --- Startup validation ---
 	if cfg.CeremonyAPIKey == "" {
-		log.Fatal("CEREMONY_API_KEY is required")
+		slog.Error("CEREMONY_API_KEY is required")
+		os.Exit(1)
 	}
 	if cfg.TrusteeKeysPath == "" {
-		log.Fatal("TRUSTEE_VERIFICATION_KEYS is required")
+		slog.Error("TRUSTEE_VERIFICATION_KEYS is required")
+		os.Exit(1)
 	}
 	if cfg.ElectionID == "" {
-		log.Fatal("ELECTION_ID is required")
+		slog.Error("ELECTION_ID is required")
+		os.Exit(1)
 	}
 
 	// --- Load trustee verification keys ---
 	trusteeKeys, err := LoadTrusteeKeys(cfg.TrusteeKeysPath)
 	if err != nil {
-		log.Fatalf("Load trustee keys: %v", err)
+		slog.Error("failed to load trustee keys", "error", err)
+		os.Exit(1)
 	}
 	slog.Info("loaded trustee keys", "count", len(trusteeKeys.Keys))
 
@@ -40,7 +48,8 @@ func main() {
 	// --- Create ceremony handler (includes crash recovery) ---
 	handler, err := NewCeremonyHandler(bbClient, trusteeKeys, cfg.ElectionID, cfg.CeremonyStateDir)
 	if err != nil {
-		log.Fatalf("Initialize ceremony handler: %v", err)
+		slog.Error("failed to initialize ceremony handler", "error", err)
+		os.Exit(1)
 	}
 
 	// --- Wire routes ---
@@ -75,6 +84,7 @@ func main() {
 
 	slog.Info("tally service listening", "addr", cfg.ListenAddr)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }
