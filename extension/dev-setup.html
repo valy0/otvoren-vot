@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dev Setup</title>
+  <style>
+    body { font-family: system-ui; max-width: 400px; margin: 40px auto; padding: 0 20px; }
+    input { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }
+    button { padding: 8px 16px; cursor: pointer; }
+    .status { margin-top: 12px; color: green; }
+  </style>
+</head>
+<body>
+  <h2>Otvoren-Vot Dev Setup</h2>
+  <p>Configure the verification service URL for local development.</p>
+  <label for="url">Verification URL:</label>
+  <input type="url" id="url" value="http://localhost:8084" />
+  <button id="save">Save</button>
+  <button id="reset">Reset to Default</button>
+  <div id="status" class="status"></div>
+  <script>
+    document.getElementById('save').addEventListener('click', async () => {
+      const url = document.getElementById('url').value
+      await chrome.storage.local.set({ verificationUrl: url })
+      document.getElementById('status').textContent = 'Saved: ' + url
+    })
+    document.getElementById('reset').addEventListener('click', async () => {
+      await chrome.storage.local.remove('verificationUrl')
+      document.getElementById('status').textContent = 'Reset to default'
+    })
+  </script>
+</body>
+</html>

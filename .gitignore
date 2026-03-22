@@ -1,0 +1,102 @@
+# =============================================================================
+# Go
+# =============================================================================
+# Compiled binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# Test binary, built with go test -c
+*.test
+# Output of go coverage
+*.out
+# Dependency vendor directory
+vendor/
+# Go workspace file
+go.work.sum
+
+# =============================================================================
+# Node.js / TypeScript
+# =============================================================================
+node_modules/
+dist/
+build/
+.npm
+*.tsbuildinfo
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+# pnpm
+.pnpm-store/
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+*.egg
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# =============================================================================
+# Docker
+# =============================================================================
+.docker/
+
+# =============================================================================
+# IDE / Editor
+# =============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# =============================================================================
+# OS
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# Project-specific
+# =============================================================================
+.superpowers/
+.worktrees/
+CLAUDE.md
+**/CLAUDE.md
+.env
+.env.*
+*.local
+*.env.local
+secrets/
+*.secret
+deploy/keys/

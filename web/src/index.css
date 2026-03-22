@@ -1,0 +1,1138 @@
+/* ==========================================================================
+   Otvoren Vot — Civic Authority Design System
+   ========================================================================== */
+
+:root {
+  /* Primary palette */
+  --navy: #0B1D3A;
+  --navy-light: #132D54;
+  --navy-muted: #3A5070;
+
+  /* Surface & background */
+  --bg: #F0EDE8;
+  --surface: #FFFFFF;
+  --surface-hover: #F8F7F5;
+
+  /* Text */
+  --text: #1A1A1A;
+  --text-dim: #5C5C5C;
+  --text-inverse: #FFFFFF;
+
+  /* Accents — Bulgarian tricolor */
+  --green: #00966E;
+  --green-light: #E6F5EF;
+  --red: #C0392B;
+  --red-light: #FCEAE8;
+
+  /* Borders */
+  --border: #D4D1CC;
+  --border-light: #E8E5E0;
+
+  /* Focus */
+  --focus-ring: #2E6FD9;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(11, 29, 58, 0.06);
+  --shadow-md: 0 4px 12px rgba(11, 29, 58, 0.08);
+  --shadow-lg: 0 8px 24px rgba(11, 29, 58, 0.10);
+
+  /* Layout */
+  --container-max: 580px;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+/* Screen-reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Reset & base
+   ========================================================================== */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--navy);
+  margin-bottom: 0.5rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--navy);
+  margin-bottom: 0.25rem;
+}
+
+p {
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   Login page — ceremonial Bulgarian state portal
+   ========================================================================== */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: #F0EDE8;
+}
+
+.login-flag {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.login-flag__band {
+  flex: 1;
+}
+
+.login-flag__band--white {
+  background: #FFFFFF;
+}
+
+.login-flag__band--green {
+  background: #00966E;
+  opacity: 0.18;
+}
+
+.login-flag__band--red {
+  background: #C0392B;
+  opacity: 0.16;
+}
+
+.login-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1.5rem;
+  width: 100%;
+  max-width: 480px;
+  animation: loginReveal 0.6s ease-out;
+}
+
+@keyframes loginReveal {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.login-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.login-coat {
+  width: 160px;
+  height: auto;
+  margin-bottom: 1.25rem;
+  filter: drop-shadow(0 4px 16px rgba(11, 29, 58, 0.12));
+  animation: coatFloat 0.8s ease-out;
+}
+
+@keyframes coatFloat {
+  from { opacity: 0; transform: scale(0.9) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.login-country {
+  font-family: 'Georgia', 'Times New Roman', 'Palatino', serif;
+  font-size: 1.125rem;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.login-tricolor-rule {
+  display: flex;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.login-tricolor-rule__white { flex: 1; background: #D4D1CC; }
+.login-tricolor-rule__green { flex: 1; background: #00966E; }
+.login-tricolor-rule__red   { flex: 1; background: #C0392B; }
+
+.login-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 8px 32px rgba(11, 29, 58, 0.10),
+    0 1px 4px rgba(11, 29, 58, 0.06);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.login-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+
+.login-subtitle {
+  font-size: 1rem;
+  color: var(--text-dim);
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
+.login-btn {
+  display: block;
+  width: 100%;
+  height: 56px;
+  background: var(--navy);
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+
+.login-btn:hover {
+  background: var(--navy-light);
+  box-shadow: 0 4px 16px rgba(11, 29, 58, 0.2);
+  transform: translateY(-1px);
+}
+
+.login-btn:active {
+  background: #091729;
+  transform: translateY(0);
+}
+
+.login-btn:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.login-footer {
+  margin-top: 2rem;
+}
+
+.login-footer__divider {
+  width: 100%;
+  height: 1px;
+  background: var(--border-light);
+  margin-bottom: 1.25rem;
+}
+
+.login-footer__note {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.login-footer__brand {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--navy-muted);
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .login-main { padding: 1.5rem 1rem; }
+  .login-coat { width: 120px; }
+  .login-country { font-size: 0.9375rem; letter-spacing: 0.15em; }
+  .login-card { padding: 2rem 1.5rem; }
+  .login-title { font-size: 1.5rem; }
+}
+
+/* ==========================================================================
+   Voting flow — shell, header, steps
+   ========================================================================== */
+
+.vote-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* Header with coat of arms + tricolor bar */
+.vote-header {
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.vote-header__inner {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.vote-header__coat {
+  width: 40px;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.vote-header__text {
+  display: flex;
+  flex-direction: column;
+}
+
+.vote-header__brand {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--navy);
+  line-height: 1.2;
+}
+
+.vote-header__country {
+  font-family: 'Georgia', 'Times New Roman', 'Palatino', serif;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  line-height: 1.2;
+}
+
+/* Tricolor bar under header */
+.vote-header__tricolor {
+  display: flex;
+  height: 4px;
+}
+
+.vote-header__band {
+  flex: 1;
+}
+
+.vote-header__band--white { background: #E8E5E0; }
+.vote-header__band--green { background: var(--green); }
+.vote-header__band--red   { background: var(--red); }
+
+/* ==========================================================================
+   Progress steps — refined with tricolor
+   ========================================================================== */
+
+.vote-steps {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
+  padding: 1rem 1.5rem;
+}
+
+.vote-steps__track {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-width: var(--container-max);
+  margin: 0 auto;
+}
+
+.vote-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.vote-step--active {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.vote-step--done {
+  color: var(--green);
+  font-weight: 500;
+}
+
+.vote-step__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--border-light);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.vote-step--active .vote-step__number {
+  background: var(--navy);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px rgba(11, 29, 58, 0.2);
+}
+
+.vote-step--done .vote-step__number {
+  background: var(--green);
+  color: var(--text-inverse);
+}
+
+.vote-step__line {
+  width: 40px;
+  height: 2px;
+  background: var(--border);
+  margin: 0 0.5rem;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+
+.vote-step--done + .vote-step__line,
+.vote-step--done ~ .vote-step__line {
+  background: var(--green);
+}
+
+/* ==========================================================================
+   Vote content area
+   ========================================================================== */
+
+.vote-content {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 2.5rem 1.5rem 2rem;
+}
+
+.vote-container {
+  max-width: var(--container-max);
+  width: 100%;
+  animation: voteSlideIn 0.35s ease-out;
+}
+
+@keyframes voteSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Vote cards
+   ========================================================================== */
+
+.vote-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Tricolor top accent on all cards */
+.vote-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    #E8E5E0 0%, #E8E5E0 33.33%,
+    var(--green) 33.33%, var(--green) 66.66%,
+    var(--red) 66.66%, var(--red) 100%
+  );
+}
+
+.vote-card--error {
+  border-left: 4px solid var(--red);
+}
+
+.vote-card--error::before {
+  background: var(--red);
+}
+
+.vote-card--success::before {
+  background: linear-gradient(
+    to right,
+    var(--green) 0%, var(--green) 50%,
+    #E6F5EF 50%, #E6F5EF 100%
+  );
+}
+
+.vote-card__header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.vote-card__header p {
+  margin-bottom: 0;
+}
+
+.vote-card__step-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: var(--green-light);
+  padding: 0.25rem 0.75rem;
+  border-radius: 100px;
+  margin-bottom: 0.75rem;
+}
+
+/* ==========================================================================
+   Vote buttons — with tricolor accent
+   ========================================================================== */
+
+.vote-btn {
+  display: block;
+  width: 100%;
+  height: 52px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.vote-btn--primary {
+  background: var(--navy);
+  color: var(--text-inverse);
+  margin-top: 1.5rem;
+}
+
+.vote-btn--primary::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    #FFFFFF 0%, #FFFFFF 33.33%,
+    #00966E 33.33%, #00966E 66.66%,
+    #C0392B 66.66%, #C0392B 100%
+  );
+}
+
+.vote-btn--primary:hover {
+  background: var(--navy-light);
+  box-shadow: 0 4px 16px rgba(11, 29, 58, 0.18);
+  transform: translateY(-1px);
+}
+
+.vote-btn--primary:active {
+  background: #091729;
+  transform: translateY(0);
+}
+
+.vote-btn--primary:disabled {
+  background: var(--navy-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
+}
+
+.vote-btn--secondary {
+  background: transparent;
+  color: var(--navy);
+  border: 2px solid var(--border);
+  margin-top: 0.75rem;
+}
+
+.vote-btn--secondary:hover {
+  border-color: var(--navy);
+  background: var(--surface-hover);
+}
+
+.vote-btn--secondary:active {
+  background: var(--border-light);
+}
+
+/* ==========================================================================
+   Ballot selection — party grid
+   ========================================================================== */
+
+.ballot-grid {
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin: 0;
+}
+
+.ballot-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  background: var(--surface);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.ballot-option:hover {
+  border-color: var(--navy-muted);
+  box-shadow: var(--shadow-md);
+  background: var(--surface-hover);
+}
+
+.ballot-option--selected {
+  border-color: var(--green);
+  background: var(--green-light);
+  box-shadow: 0 0 0 1px var(--green), var(--shadow-sm);
+}
+
+.ballot-option--selected:hover {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+
+.ballot-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Custom radio indicator */
+.ballot-option__indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ballot-option__radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.ballot-option--selected .ballot-option__radio {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.ballot-option--selected .ballot-option__radio::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  transform: translate(-50%, -50%);
+}
+
+.ballot-option__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ballot-option__number {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: 0.125rem;
+}
+
+.ballot-option--selected .ballot-option__number {
+  color: var(--green);
+}
+
+.ballot-option__name {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--navy);
+  line-height: 1.3;
+}
+
+.ballot-option__candidates {
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+  line-height: 1.5;
+}
+
+/* Separator between parties and blank vote */
+.ballot-separator {
+  height: 1px;
+  background: var(--border-light);
+  margin: 0.5rem 0;
+}
+
+/* Blank vote option */
+.ballot-option--blank .ballot-option__name {
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+.ballot-option--blank.ballot-option--selected .ballot-option__name {
+  color: var(--navy);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Confirmation phase
+   ========================================================================== */
+
+.confirm-choice {
+  display: flex;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border-light);
+}
+
+/* Vertical tricolor accent on left side of choice summary */
+.confirm-choice__flag {
+  width: 6px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.confirm-choice__flag > span:nth-child(1) { flex: 1; background: #E8E5E0; }
+.confirm-choice__flag > span:nth-child(2) { flex: 1; background: var(--green); }
+.confirm-choice__flag > span:nth-child(3) { flex: 1; background: var(--red); }
+
+.confirm-choice__body {
+  padding: 1.25rem;
+  flex: 1;
+  background: var(--surface-hover);
+}
+
+.confirm-choice__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-bottom: 0.375rem;
+}
+
+.confirm-choice__party {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 0.25rem;
+}
+
+.confirm-choice__candidates {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.confirm-choice__candidate {
+  font-size: 0.9375rem;
+  color: var(--navy);
+  margin-top: 0.25rem;
+}
+
+.confirm-choice__candidate--none {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Crypto status */
+.confirm-crypto {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-light);
+  margin-bottom: 0.5rem;
+}
+
+.confirm-crypto--ready {
+  background: var(--green-light);
+  border-color: var(--green);
+}
+
+.confirm-crypto__icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.confirm-crypto__text {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.confirm-crypto--ready .confirm-crypto__text {
+  color: var(--green);
+  font-weight: 500;
+}
+
+.confirm-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   Spinner — tricolor ring
+   ========================================================================== */
+
+.vote-spinner {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0 0.5rem;
+}
+
+.vote-spinner__ring {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid var(--border-light);
+  border-top-color: var(--green);
+  border-right-color: var(--red);
+  animation: voteSpin 0.9s linear infinite;
+}
+
+@keyframes voteSpin {
+  to { transform: rotate(360deg); }
+}
+
+.vote-spinner__text {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.875rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+
+/* ==========================================================================
+   Error icon
+   ========================================================================== */
+
+.vote-error-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  position: relative;
+}
+
+.vote-error-icon::before,
+.vote-error-icon::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 3px;
+  background: var(--text-inverse);
+  border-radius: 2px;
+}
+
+.vote-error-icon::before { transform: rotate(45deg); }
+.vote-error-icon::after  { transform: rotate(-45deg); }
+
+/* ==========================================================================
+   Done / receipt page
+   ========================================================================== */
+
+.done-hero {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.done-hero__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  position: relative;
+  box-shadow: 0 4px 16px rgba(0, 150, 110, 0.2);
+}
+
+.done-hero__icon::after {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 28px;
+  border: solid var(--text-inverse);
+  border-width: 0 3.5px 3.5px 0;
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+
+.done-hero__sub {
+  color: var(--text-dim);
+  margin-bottom: 0;
+}
+
+.done-override {
+  background: #FFF8E1;
+  border: 1px solid #F9D67A;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: #6D5800;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+/* Receipt block — document-like */
+.done-receipt {
+  background: var(--surface-hover);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.done-receipt__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.done-receipt__title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--navy-muted);
+}
+
+.done-receipt__tricolor {
+  display: flex;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.done-receipt__tricolor::before {
+  content: '';
+  flex: 1;
+  background: #D4D1CC;
+}
+
+.done-receipt__tricolor::after {
+  content: '';
+  flex: 2;
+  background: linear-gradient(to right, var(--green) 50%, var(--red) 50%);
+}
+
+.done-receipt__row {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.done-receipt__row:last-child {
+  border-bottom: none;
+}
+
+.done-receipt__label {
+  display: block;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-bottom: 0.375rem;
+}
+
+.done-receipt__code {
+  display: block;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.5;
+  background: var(--surface);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+}
+
+.done-receipt__value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.done-note {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  text-align: center;
+  margin-bottom: 0;
+}
+
+.done-note strong {
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.done-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.done-actions .vote-btn {
+  flex: 1;
+  margin-top: 0;
+  height: 44px;
+  font-size: 0.875rem;
+}
+
+/* ==========================================================================
+   Focus styles — WCAG 2.1 AA
+   ========================================================================== */
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ballot-option:focus-within {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 600px) {
+  .vote-header__inner {
+    padding: 0.625rem 1rem;
+  }
+
+  .vote-header__coat {
+    width: 32px;
+  }
+
+  .vote-steps {
+    padding: 0.75rem 0.5rem;
+    overflow-x: auto;
+  }
+
+  .vote-step {
+    font-size: 0.75rem;
+  }
+
+  .vote-step__number {
+    width: 26px;
+    height: 26px;
+    font-size: 0.75rem;
+  }
+
+  .vote-step__line {
+    width: 20px;
+    margin: 0 0.25rem;
+  }
+
+  .vote-step__label {
+    display: none;
+  }
+
+  .vote-content {
+    padding: 1.5rem 1rem;
+  }
+
+  .vote-card {
+    padding: 1.5rem;
+  }
+
+  h1 {
+    font-size: 1.375rem;
+  }
+}
