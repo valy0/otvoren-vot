@@ -59,6 +59,43 @@ func TestFeldmanReconstructionDifferentSubset(t *testing.T) {
 	}
 }
 
+func TestLagrangeInterpolateRoundTrip(t *testing.T) {
+	dealer := NewDealer(3, 5)
+
+	subsets := [][]int{
+		{1, 2, 3},
+		{1, 3, 5},
+		{2, 4, 5},
+		{3, 4, 5},
+	}
+
+	for _, indices := range subsets {
+		shares := make([]*edwards25519.Scalar, len(indices))
+		for i, idx := range indices {
+			shares[i] = dealer.Shares[idx-1]
+		}
+		secret := LagrangeInterpolate(shares, indices)
+		if secret.Equal(dealer.Secret()) != 1 {
+			t.Fatalf("subset %v should reconstruct the original secret", indices)
+		}
+	}
+}
+
+func TestLagrangeInterpolateBelowThreshold(t *testing.T) {
+	dealer := NewDealer(3, 5)
+
+	// Only 2 shares — below threshold of 3
+	indices := []int{1, 4}
+	shares := make([]*edwards25519.Scalar, len(indices))
+	for i, idx := range indices {
+		shares[i] = dealer.Shares[idx-1]
+	}
+	secret := LagrangeInterpolate(shares, indices)
+	if secret.Equal(dealer.Secret()) == 1 {
+		t.Fatal("2-of-5 should NOT reconstruct correctly (with overwhelming probability)")
+	}
+}
+
 func TestFeldmanInsufficientShares(t *testing.T) {
 	dealer := NewDealer(5, 9)
 	// Only 4 shares — should NOT reconstruct correctly
