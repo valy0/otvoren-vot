@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otvoren-Vot — Decryption Ceremony</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-body: 'Sora', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    --bg: #080c14; --surface: #0f1520; --surface2: #161e2e;
+    --border: rgba(255,255,255,0.07); --border-bright: rgba(255,255,255,0.14);
+    --text: #eaf0f8; --text-dim: #9ca3bf;
+    --gold: #fbbf24; --gold-dim: rgba(251,191,36,0.09);
+    --blue: #3b82f6; --blue-dim: rgba(59,130,246,0.09);
+    --green: #00c98d; --green-dim: rgba(0,201,141,0.09); --green-glow: rgba(0,201,141,0.30);
+    --red: #ef4444; --red-dim: rgba(239,68,68,0.09);
+    --purple: #a78bfa; --purple-dim: rgba(167,139,250,0.09);
+    --cyan: #22d3ee; --cyan-dim: rgba(34,211,238,0.09);
+    --orange: #f59e0b; --orange-dim: rgba(245,158,11,0.09);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fc; --surface: #ffffff; --surface2: #f0f2f7;
+      --border: rgba(0,0,0,0.08); --border-bright: rgba(0,0,0,0.16);
+      --text: #1e293b; --text-dim: #475569;
+      --gold: #b45309; --gold-dim: rgba(180,83,9,0.07);
+      --blue: #1d4ed8; --blue-dim: rgba(29,78,216,0.07);
+      --green: #059669; --green-dim: rgba(5,150,105,0.07); --green-glow: rgba(5,150,105,0.15);
+      --red: #dc2626; --red-dim: rgba(220,38,38,0.07);
+      --purple: #6d28d9; --purple-dim: rgba(109,40,217,0.07);
+      --cyan: #0891b2; --cyan-dim: rgba(8,145,178,0.07);
+      --orange: #b45309; --orange-dim: rgba(180,83,9,0.07);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 50% 0%, var(--gold-dim) 0%, transparent 35%),
+      radial-gradient(ellipse at 50% 100%, var(--green-dim) 0%, transparent 35%);
+    color: var(--text); font-family: var(--font-body);
+    padding: 48px 40px 60px; min-height: 100vh;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulseGreen { 0%,100% { box-shadow: 0 0 0 0 var(--green-glow); } 50% { box-shadow: 0 0 12px 4px var(--green-glow); } }
+  .anim { animation: fadeUp 0.45s ease-out both; animation-delay: calc(var(--i,0) * 0.06s); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; } }
+
+  .container { max-width: 900px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 44px; }
+  .header .flag { display: inline-flex; border-radius: 4px; overflow: hidden; margin-bottom: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+  .header .flag span { width: 28px; height: 6px; }
+  .f-w { background: #fff; } .f-g { background: #00966E; } .f-r { background: #D62612; }
+  .subtitle { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 38px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 10px; }
+  .tagline { font-size: 14px; color: var(--text-dim); line-height: 1.7; max-width: 660px; margin: 0 auto; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 100px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 84px; top: 0; bottom: 0;
+    width: 2px; background: linear-gradient(to bottom, var(--gold), var(--blue), var(--green));
+  }
+
+  .tl-event { position: relative; margin-bottom: 20px; padding-left: 32px; }
+  .tl-event::before {
+    content: ''; position: absolute; left: -24px; top: 14px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--border-bright); z-index: 2;
+  }
+  .tl-time {
+    position: absolute; left: -100px; top: 10px; width: 68px; text-align: right;
+    font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  }
+  .tl-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px; transition: border-color 0.2s;
+  }
+  .tl-card:hover { border-color: var(--border-bright); }
+  .tl-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .tl-card .tag {
+    font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .tl-card p { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
+  .tl-card .detail {
+    margin-top: 10px; padding: 12px 14px;
+    background: var(--surface2); border-radius: 8px;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.8; color: var(--text-dim);
+  }
+
+  .tl-event--seal::before { border-color: var(--red); background: var(--red-dim); }
+  .tl-event--seal .tl-time { color: var(--red); }
+  .tl-event--commit::before { border-color: var(--orange); background: var(--orange-dim); }
+  .tl-event--commit .tl-time { color: var(--orange); }
+  .tl-event--proof::before { border-color: var(--purple); background: var(--purple-dim); }
+  .tl-event--proof .tl-time { color: var(--purple); }
+  .tl-event--tally::before { border-color: var(--blue); background: var(--blue-dim); }
+  .tl-event--tally .tl-time { color: var(--blue); }
+  .tl-event--trustee::before { border-color: var(--gold); background: var(--gold-dim); }
+  .tl-event--trustee .tl-time { color: var(--gold); }
+  .tl-event--result::before { border-color: var(--green); background: var(--green-dim); animation: pulseGreen 2s ease-in-out infinite; }
+  .tl-event--result .tl-time { color: var(--green); }
+  .tl-event--extra::before { border-color: var(--cyan); background: var(--cyan-dim); }
+  .tl-event--extra .tl-time { color: var(--cyan); }
+
+  .tag--seal { background: var(--red-dim); color: var(--red); }
+  .tag--proof { background: var(--purple-dim); color: var(--purple); }
+  .tag--tally { background: var(--blue-dim); color: var(--blue); }
+  .tag--trustee { background: var(--gold-dim); color: var(--gold); }
+  .tag--result { background: var(--green-dim); color: var(--green); }
+  .tag--extra { background: var(--cyan-dim); color: var(--cyan); }
+  .tag--commit { background: var(--orange-dim); color: var(--orange); }
+
+  .trustees { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; margin-top: 14px; }
+  .trustee {
+    text-align: center; padding: 8px 4px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    font-family: var(--font-mono); font-size: 10px;
+  }
+  .trustee-num { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+  .trustee--active { border-color: var(--gold); background: var(--gold-dim); }
+  .trustee--active .trustee-num { color: var(--gold); }
+  .trustee--done { border-color: var(--green); background: var(--green-dim); }
+  .trustee--done .trustee-num { color: var(--green); }
+  .trustee--waiting { opacity: 0.5; }
+
+  .hsm-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+  .hsm-step {
+    text-align: center; padding: 12px 8px; background: var(--surface2);
+    border-radius: 8px; border: 1px solid var(--border);
+  }
+  .hsm-step .icon { font-size: 18px; margin-bottom: 4px; }
+  .hsm-step .label { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+
+  .duration-bar { margin-top: 10px; height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+  .duration-fill { height: 100%; border-radius: 3px; }
+
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    body { padding: 20px; } h1 { font-size: 26px; }
+    .timeline { padding-left: 70px; } .timeline::before { left: 54px; }
+    .tl-time { left: -70px; width: 48px; font-size: 11px; }
+    .trustees { grid-template-columns: repeat(5, 1fr); }
+    .hsm-steps { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header anim" style="--i:0">
+    <div class="flag"><span class="f-w"></span><span class="f-g"></span><span class="f-r"></span></div>
+    <p class="subtitle">Otvoren-Vot &middot; End-to-End Verifiable E-Voting</p>
+    <h1>Decryption Ceremony</h1>
+    <p class="tagline">Nationally televised event. Nine trustees from adversarial institutions — political parties, judiciary, civil society, media, academia — each holding a USB HSM. Results emerge from cryptographic proof, verified live on screen.</p>
+  </div>
+
+  <div class="timeline">
+
+    <div class="tl-event tl-event--seal anim" style="--i:1">
+      <div class="tl-time">20:00</div>
+      <div class="tl-card">
+        <h3>Polls Close <span class="tag tag--seal">Board Sealed</span></h3>
+        <p>Bulletin board transitions to <strong>read-only mode</strong> — irreversible for this election. Final Merkle root (SHA-256 + Poseidon) signed and published. No further ballots accepted.</p>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--commit anim" style="--i:2">
+      <div class="tl-time">20:01</div>
+      <div class="tl-card">
+        <h3>Active Set Commitment <span class="tag tag--commit">Layer 1 → 2</span></h3>
+        <p>Collection Server computes the active ballot ID set — one ballot per voter, the most recent. Sorts lexicographically, hashes with SHA-256, signs. Published to bulletin board. Full ID list (no ЕГНs) handed to Tally Service. <strong>Dual-operator approval required.</strong></p>
+        <div class="detail">
+          active_set_commitment = SHA-256(sorted_ballot_ids)<br>
+          signed by Collection Server key + election_id + timestamp<br>
+          active_set_size = N unique voters
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--trustee anim" style="--i:3">
+      <div class="tl-time">20:02</div>
+      <div class="tl-card">
+        <h3>Live Broadcast Begins <span class="tag tag--trustee">On Air</span></h3>
+        <p>Nine trustees seated at the ceremony table, each with their USB HSM. Ceremony workstation hash verified on camera via TPM attestation. Air-gapped from internet — local connection to bulletin board only.</p>
+        <div class="trustees">
+          <div class="trustee trustee--waiting"><div class="trustee-num">T1</div>Party</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T2</div>Party</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T3</div>Party</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T4</div>Judge</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T5</div>NGO</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T6</div>Media</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T7</div>Acad.</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T8</div>Party</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T9</div>Civil</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--proof anim" style="--i:4">
+      <div class="tl-time">20:05</div>
+      <div class="tl-card">
+        <h3>ZK Deduplication Proof <span class="tag tag--proof">gnark Groth16</span></h3>
+        <p>Tally Service generates the SNARK proof: filtered ballot set matches committed active set exactly. Recursive batch composition: ~10,000 ballots per batch, parallel across 64 cores. Progress bar on broadcast.</p>
+        <div class="detail">
+          Public inputs: sealed Merkle root (SHA-256 + Poseidon), active set commitment,<br>
+          active set size, filtered set Merkle root<br>
+          Private witness: active ballot IDs + Poseidon Merkle inclusion proofs<br>
+          Proof size: ~192 bytes (constant, regardless of voter count)
+        </div>
+        <div class="duration-bar"><div class="duration-fill" style="width:65%; background: linear-gradient(90deg, var(--purple), var(--purple-dim));"></div></div>
+        <p style="font-family:var(--font-mono);font-size:11px;color:var(--purple);margin-top:6px;">~60 minutes worst case</p>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--tally anim" style="--i:5">
+      <div class="tl-time">~21:06</div>
+      <div class="tl-card">
+        <h3>Homomorphic Tallying <span class="tag tag--tally">Ristretto255</span></h3>
+        <p>Element-wise multiplication of all active encrypted ballots. ElGamal is additively homomorphic: Enc(a) × Enc(b) = Enc(a+b). No individual ballot is ever decrypted — only the aggregate sums.</p>
+        <div class="detail">
+          50 party sums + 2,500 candidate sums = 2,550 encrypted ciphertexts<br>
+          ~4M voters × 2,550 options ≈ 10 billion point additions<br>
+          Parallelized across 64 cores → ~9 minutes
+        </div>
+        <div class="duration-bar"><div class="duration-fill" style="width:12%; background: linear-gradient(90deg, var(--blue), var(--blue-dim));"></div></div>
+        <p style="font-family:var(--font-mono);font-size:11px;color:var(--blue);margin-top:6px;">~9 minutes</p>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--trustee anim" style="--i:6">
+      <div class="tl-time">~21:16</div>
+      <div class="tl-card">
+        <h3>Trustee Decryption Phase <span class="tag tag--trustee">5-of-9 Threshold</span></h3>
+        <p>The central dramatic moment. Each trustee approaches the ceremony workstation one by one, inserts their USB HSM, and contributes partial decryptions. The key share <strong>never leaves the HSM</strong>.</p>
+        <div class="hsm-steps">
+          <div class="hsm-step"><div class="icon">🔑</div><div class="label">Insert HSM<br>PIN auth on device</div></div>
+          <div class="hsm-step"><div class="icon">🔐</div><div class="label">HSM computes<br>partial decryptions</div></div>
+          <div class="hsm-step"><div class="icon">📜</div><div class="label">Chaum-Pedersen<br>proof per value</div></div>
+          <div class="hsm-step"><div class="icon" style="color:var(--green)">✓</div><div class="label" style="color:var(--green)">Proof verified<br>green checkmark</div></div>
+        </div>
+        <div class="trustees">
+          <div class="trustee trustee--done"><div class="trustee-num">T1</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T2</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T3</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T4</div>✓</div>
+          <div class="trustee trustee--active"><div class="trustee-num">T5</div>⏳</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T6</div>—</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T7</div>—</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T8</div>—</div>
+          <div class="trustee trustee--waiting"><div class="trustee-num">T9</div>—</div>
+        </div>
+        <p style="font-family:var(--font-mono);font-size:11px;color:var(--gold);margin-top:8px;">~2 minutes per trustee × 5 minimum = ~10 minutes</p>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--result anim" style="--i:7">
+      <div class="tl-time">~21:35</div>
+      <div class="tl-card" style="border-color: rgba(0,201,141,0.25); background: var(--green-dim);">
+        <h3 style="color:var(--green); font-size: 18px;">Results on Screen <span class="tag tag--result">RESULTS</span></h3>
+        <p>After the 5th trustee's partial decryption is verified, the Tally Service:</p>
+        <div class="detail">
+          1. Combine partial decryptions via Lagrange interpolation in the exponent<br>
+          2. Recover g^m for each of 2,550 tally slots<br>
+          3. Solve discrete log via Baby-Step Giant-Step (BSGS):<br>
+          &nbsp;&nbsp;&nbsp;O(√4M) ≈ 2,000 steps per slot → under 1 second total<br>
+          4. <strong style="color:var(--green)">Plaintext vote totals appear on the broadcast screen</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--extra anim" style="--i:8">
+      <div class="tl-time">~21:45</div>
+      <div class="tl-card">
+        <h3>Confidence Building <span class="tag tag--extra">Trustees 6–9</span></h3>
+        <p>Remaining trustees contribute additional partial decryptions. Not mathematically required, but: enables redundant verification from multiple 5-of-9 subsets, no trustee can claim exclusion, demonstrates all HSMs are functional.</p>
+        <div class="trustees">
+          <div class="trustee trustee--done"><div class="trustee-num">T1</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T2</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T3</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T4</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T5</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T6</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T7</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T8</div>✓</div>
+          <div class="trustee trustee--done"><div class="trustee-num">T9</div>✓</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--proof anim" style="--i:9">
+      <div class="tl-time">~21:50</div>
+      <div class="tl-card">
+        <h3>Tally Correctness Proof <span class="tag tag--proof">Sigma</span></h3>
+        <p>Final artifact: Chaum-Pedersen Sigma proof that published plaintext results are consistent with encrypted sums and combined partial decryptions. Published to bulletin board.</p>
+      </div>
+    </div>
+
+    <div class="tl-event tl-event--result anim" style="--i:10">
+      <div class="tl-time">~21:55</div>
+      <div class="tl-card" style="border-color: rgba(0,201,141,0.15);">
+        <h3>Ceremony Complete <span class="tag tag--result">All Artifacts Published</span></h3>
+        <p>All 6 artifacts on the bulletin board: active set commitment, dedup SNARK proof, encrypted tally sums, trustee partial decryptions + Chaum-Pedersen proofs, plaintext results, tally correctness proof. <strong>Independent verification can begin immediately.</strong></p>
+        <div class="detail" style="text-align:center; color: var(--green);">
+          otvoren-vot verify all — anyone can download and independently recompute
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="legend anim" style="--i:11">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--red)"></div>Board Sealed</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--orange)"></div>Active Set</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--purple)"></div>ZK Proofs</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--blue)"></div>Homomorphic Tally</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--gold)"></div>Trustee Decryption</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div>Results</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--cyan)"></div>Confidence</div>
+  </div>
+
+</div>
+</body>
+</html>
