@@ -10,15 +10,18 @@ func TestEnqueueAndPending(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	q := NewQueue(dir)
-	rec, err := q.Enqueue(2, "123456")
+	rec, err := q.Enqueue("ballot-001", []byte(`{"ct":"encrypted"}`), []byte(`{"proof":"zk"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.BallotID == "" {
-		t.Fatal("ballot ID should not be empty")
+	if rec.BallotID != "ballot-001" {
+		t.Fatalf("expected ballot-001, got %s", rec.BallotID)
 	}
-	if rec.PartyIndex != 2 {
-		t.Fatalf("expected party 2, got %d", rec.PartyIndex)
+	if rec.EncryptedBallot == nil {
+		t.Fatal("encrypted ballot should not be nil")
+	}
+	if rec.ZKProofs == nil {
+		t.Fatal("zk proofs should not be nil")
 	}
 
 	pending := q.Pending()
@@ -27,12 +30,23 @@ func TestEnqueueAndPending(t *testing.T) {
 	}
 }
 
+func TestEnqueueRequiresBallotID(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "machine-test")
+	defer os.RemoveAll(dir)
+
+	q := NewQueue(dir)
+	_, err := q.Enqueue("", nil, nil)
+	if err == nil {
+		t.Fatal("expected error for empty ballot ID")
+	}
+}
+
 func TestMarkSynced(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "machine-test")
 	defer os.RemoveAll(dir)
 
 	q := NewQueue(dir)
-	rec, _ := q.Enqueue(0, "111111")
+	rec, _ := q.Enqueue("ballot-002", []byte(`enc`), []byte(`zk`))
 	q.MarkSynced(rec.BallotID)
 
 	pending := q.Pending()
@@ -46,9 +60,9 @@ func TestQueueSize(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	q := NewQueue(dir)
-	q.Enqueue(0, "a")
-	q.Enqueue(1, "b")
-	q.Enqueue(2, "c")
+	q.Enqueue("a", []byte(`enc`), []byte(`zk`))
+	q.Enqueue("b", []byte(`enc`), []byte(`zk`))
+	q.Enqueue("c", []byte(`enc`), []byte(`zk`))
 
 	if q.Size() != 3 {
 		t.Fatalf("expected 3, got %d", q.Size())
@@ -60,7 +74,7 @@ func TestPersistence(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	q := NewQueue(dir)
-	rec, _ := q.Enqueue(1, "999999")
+	rec, _ := q.Enqueue("ballot-persist", []byte(`enc`), []byte(`zk`))
 
 	// Check file exists
 	files, _ := os.ReadDir(dir)
@@ -69,5 +83,15 @@ func TestPersistence(t *testing.T) {
 	}
 	if files[0].Name() != rec.BallotID+".json" {
 		t.Fatalf("unexpected filename: %s", files[0].Name())
+	}
+}
+
+func TestGenerateBallotID(t *testing.T) {
+	id, err := GenerateBallotID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(id) != 64 {
+		t.Fatalf("expected 64 hex chars, got %d", len(id))
 	}
 }

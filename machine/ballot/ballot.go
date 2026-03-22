@@ -12,12 +12,13 @@ import (
 )
 
 // Record represents a locally queued ballot.
+// Only opaque encrypted data is stored — no plaintext voter selections.
 type Record struct {
-	BallotID    string    `json:"ballot_id"`
-	PartyIndex  int       `json:"party_index"`
-	SessionCode string    `json:"session_code"`
-	CreatedAt   time.Time `json:"created_at"`
-	Synced      bool      `json:"synced"`
+	BallotID        string    `json:"ballot_id"`
+	EncryptedBallot []byte    `json:"encrypted_ballot"`
+	ZKProofs        []byte    `json:"zk_proofs"`
+	CreatedAt       time.Time `json:"created_at"`
+	Synced          bool      `json:"synced"`
 }
 
 // Queue manages locally stored ballots for offline operation.
@@ -33,18 +34,18 @@ func NewQueue(dataDir string) *Queue {
 	return &Queue{dataDir: dataDir}
 }
 
-// Enqueue adds a ballot to the local queue.
-func (q *Queue) Enqueue(partyIndex int, sessionCode string) (*Record, error) {
-	id, err := generateBallotID()
-	if err != nil {
-		return nil, err
+// Enqueue adds an encrypted ballot to the local queue.
+// Only opaque blobs are stored — no plaintext voter selections.
+func (q *Queue) Enqueue(ballotID string, encryptedBallot, zkProofs []byte) (*Record, error) {
+	if ballotID == "" {
+		return nil, fmt.Errorf("ballot_id is required")
 	}
 
 	rec := &Record{
-		BallotID:    id,
-		PartyIndex:  partyIndex,
-		SessionCode: sessionCode,
-		CreatedAt:   time.Now(),
+		BallotID:        ballotID,
+		EncryptedBallot: encryptedBallot,
+		ZKProofs:        zkProofs,
+		CreatedAt:       time.Now(),
 	}
 
 	q.mu.Lock()
@@ -99,7 +100,8 @@ func (q *Queue) persist(rec *Record) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-func generateBallotID() (string, error) {
+// GenerateBallotID creates a cryptographically random ballot identifier.
+func GenerateBallotID() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
