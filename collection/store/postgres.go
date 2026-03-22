@@ -43,9 +43,20 @@ func New(ctx context.Context, databaseURL, electionID string, historyHMACKey []b
 	return &PostgresStore{pool: pool, electionID: electionID, historyHMACKey: historyHMACKey}, nil
 }
 
-// RunMigrations executes all SQL migration files in sorted order,
+// RunMigrations executes SQL migration files that have not yet been applied,
 // then creates the election-specific partition for voter_ballot_history.
+// It tracks applied migrations in a schema_migrations table, skipping any
+// migration whose filename has already been recorded.
 func (s *PostgresStore) RunMigrations(ctx context.Context) error {
+	// Ensure the schema_migrations tracking table exists.
+	const createTrackingTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version    TEXT PRIMARY KEY,
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`
+	if _, err := s.pool.Exec(ctx, createTrackingTable); err != nil {
+		return fmt.Errorf("create schema_migrations table: %w", err)
+	}
+
 	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read migrations dir: %w", err)
@@ -57,12 +68,31 @@ func (s *PostgresStore) RunMigrations(ctx context.Context) error {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
-		sql, err := migrations.ReadFile("migrations/" + entry.Name())
+		version := entry.Name()
+
+		// Check whether this migration has already been applied.
+		var exists bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = $1)`,
+			version).Scan(&exists); err != nil {
+			return fmt.Errorf("check migration %s: %w", version, err)
+		}
+		if exists {
+			continue
+		}
+
+		sql, err := migrations.ReadFile("migrations/" + version)
 		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
+			return fmt.Errorf("read migration %s: %w", version, err)
 		}
 		if _, err := s.pool.Exec(ctx, string(sql)); err != nil {
-			return fmt.Errorf("execute migration %s: %w", entry.Name(), err)
+			return fmt.Errorf("execute migration %s: %w", version, err)
+		}
+
+		// Record the migration as applied.
+		if _, err := s.pool.Exec(ctx,
+			`INSERT INTO schema_migrations (version) VALUES ($1)`, version); err != nil {
+			return fmt.Errorf("record migration %s: %w", version, err)
 		}
 	}
 	// Create partition for current election (defense-in-depth: re-validate UUID)
