@@ -1,17 +1,28 @@
 package elgamal
 
 import (
+	"errors"
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
+	"github.com/valy0/otvoren-vot/crypto/internal"
 )
+
+func mustEncrypt(t *testing.T, pk *ristretto255.Element, m int) (*Ciphertext, *ristretto255.Scalar) {
+	t.Helper()
+	ct, r, err := Encrypt(pk, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ct, r
+}
 
 func TestKeyGeneration(t *testing.T) {
 	kp := GenerateKeyPair()
 	if kp.PrivateKey == nil || kp.PublicKey == nil {
 		t.Fatal("key pair fields should not be nil")
 	}
-	expected := new(edwards25519.Point).ScalarBaseMult(kp.PrivateKey)
+	expected := ristretto255.NewIdentityElement().ScalarBaseMult(kp.PrivateKey)
 	if expected.Equal(kp.PublicKey) != 1 {
 		t.Fatal("public key should equal g^x")
 	}
@@ -19,7 +30,7 @@ func TestKeyGeneration(t *testing.T) {
 
 func TestEncryptDecryptZero(t *testing.T) {
 	kp := GenerateKeyPair()
-	ct, _ := Encrypt(kp.PublicKey, 0)
+	ct, _ := mustEncrypt(t, kp.PublicKey, 0)
 	m := Decrypt(kp.PrivateKey, ct)
 	if m != 0 {
 		t.Fatalf("expected 0, got %d", m)
@@ -28,7 +39,7 @@ func TestEncryptDecryptZero(t *testing.T) {
 
 func TestEncryptDecryptOne(t *testing.T) {
 	kp := GenerateKeyPair()
-	ct, _ := Encrypt(kp.PublicKey, 1)
+	ct, _ := mustEncrypt(t, kp.PublicKey, 1)
 	m := Decrypt(kp.PrivateKey, ct)
 	if m != 1 {
 		t.Fatalf("expected 1, got %d", m)
@@ -37,9 +48,9 @@ func TestEncryptDecryptOne(t *testing.T) {
 
 func TestHomomorphicAddition(t *testing.T) {
 	kp := GenerateKeyPair()
-	ct1, _ := Encrypt(kp.PublicKey, 1)
-	ct2, _ := Encrypt(kp.PublicKey, 1)
-	ct3, _ := Encrypt(kp.PublicKey, 0)
+	ct1, _ := mustEncrypt(t, kp.PublicKey, 1)
+	ct2, _ := mustEncrypt(t, kp.PublicKey, 1)
+	ct3, _ := mustEncrypt(t, kp.PublicKey, 0)
 	sum := HomomorphicAdd(ct1, ct2, ct3)
 	m := Decrypt(kp.PrivateKey, sum)
 	if m != 2 {
@@ -52,9 +63,9 @@ func TestHomomorphicTally(t *testing.T) {
 	cts := make([]*Ciphertext, 100)
 	for i := 0; i < 100; i++ {
 		if i < 60 {
-			cts[i], _ = Encrypt(kp.PublicKey, 1)
+			cts[i], _ = mustEncrypt(t, kp.PublicKey, 1)
 		} else {
-			cts[i], _ = Encrypt(kp.PublicKey, 0)
+			cts[i], _ = mustEncrypt(t, kp.PublicKey, 0)
 		}
 	}
 	sum := HomomorphicAdd(cts...)
@@ -73,7 +84,7 @@ func TestHomomorphicAddEmpty(t *testing.T) {
 
 func TestCiphertextSerialization(t *testing.T) {
 	kp := GenerateKeyPair()
-	ct, _ := Encrypt(kp.PublicKey, 1)
+	ct, _ := mustEncrypt(t, kp.PublicKey, 1)
 	data := ct.Bytes()
 	ct2, err := CiphertextFromBytes(data)
 	if err != nil {
@@ -87,10 +98,29 @@ func TestCiphertextSerialization(t *testing.T) {
 
 func TestEncryptReturnsRandomness(t *testing.T) {
 	kp := GenerateKeyPair()
-	ct, r := Encrypt(kp.PublicKey, 1)
+	ct, r := mustEncrypt(t, kp.PublicKey, 1)
 	// Verify r produces the same ciphertext
-	ct2 := EncryptWithRandomness(kp.PublicKey, 1, r)
+	ct2, err := EncryptWithRandomness(kp.PublicKey, 1, r)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if ct.C1.Equal(ct2.C1) != 1 || ct.C2.Equal(ct2.C2) != 1 {
 		t.Fatal("Encrypt and EncryptWithRandomness with same r should produce same ciphertext")
+	}
+}
+
+func TestEncryptRejectsBadPublicKey(t *testing.T) {
+	identity := ristretto255.NewIdentityElement()
+	r := internal.RandomScalar()
+	for name, pk := range map[string]*ristretto255.Element{"nil": nil, "identity": identity} {
+		if _, _, err := Encrypt(pk, 1); !errors.Is(err, ErrInvalidPublicKey) {
+			t.Errorf("Encrypt with %s key: err = %v, want ErrInvalidPublicKey", name, err)
+		}
+		if _, err := EncryptWithRandomness(pk, 1, r); !errors.Is(err, ErrInvalidPublicKey) {
+			t.Errorf("EncryptWithRandomness with %s key: err = %v, want ErrInvalidPublicKey", name, err)
+		}
+	}
+	if _, err := EncryptWithRandomness(GenerateKeyPair().PublicKey, 1, nil); err == nil {
+		t.Error("EncryptWithRandomness with nil r: want error")
 	}
 }

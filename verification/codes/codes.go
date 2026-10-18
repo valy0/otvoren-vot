@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 )
 
 // CodeMapping maps party names to verification codes for a session.
@@ -18,7 +18,7 @@ type CodeMapping struct {
 // GenerateCodeMapping creates a per-session code mapping for all parties.
 // The masterSecret is the reconstructed Ristretto255 scalar from threshold key shares.
 // Each party receives a deterministic 8-digit code derived via domain-separated HMAC.
-func GenerateCodeMapping(sessionID string, parties []string, masterSecret *edwards25519.Scalar) *CodeMapping {
+func GenerateCodeMapping(sessionID string, parties []string, masterSecret *ristretto255.Scalar) *CodeMapping {
 	mapping := &CodeMapping{
 		SessionID: sessionID,
 		Codes:     make(map[string]string),
@@ -33,7 +33,7 @@ func GenerateCodeMapping(sessionID string, parties []string, masterSecret *edwar
 // DeriveReturnCode computes the return code for an encrypted ballot.
 // The code is deterministic: same ciphertext + same master secret = same code.
 // Uses domain-separated HMAC with the master secret's 32-byte scalar representation.
-func DeriveReturnCode(masterSecret *edwards25519.Scalar, sessionID string, encryptedBallotBytes []byte) string {
+func DeriveReturnCode(masterSecret *ristretto255.Scalar, sessionID string, encryptedBallotBytes []byte) string {
 	mac := hmac.New(sha256.New, masterSecret.Bytes())
 	mac.Write([]byte("otvoren-vot.return-code\x00"))
 	mac.Write([]byte(sessionID))
@@ -53,7 +53,7 @@ func VerifyReturnCode(mapping *CodeMapping, returnCode string) (string, bool) {
 	return "", false
 }
 
-func deriveCode(masterSecret *edwards25519.Scalar, sessionID, party string) string {
+func deriveCode(masterSecret *ristretto255.Scalar, sessionID, party string) string {
 	mac := hmac.New(sha256.New, masterSecret.Bytes())
 	mac.Write([]byte("otvoren-vot.code-mapping\x00"))
 	mac.Write([]byte(sessionID))

@@ -1,138 +1,227 @@
 package threshold
 
 import (
-	"math/big"
+	"errors"
+	"fmt"
+	"math"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/internal"
+)
+
+var (
+	// ErrDuplicateIndex is returned when a trustee index appears twice in a
+	// set of shares or partial decryptions.
+	ErrDuplicateIndex = errors.New("threshold: duplicate trustee index")
+	// ErrBadIndex is returned for a trustee index outside 1..2^32-1. Index 0
+	// would evaluate the polynomial at the secret, and the transcript carries
+	// the index as a u32.
+	ErrBadIndex = errors.New("threshold: trustee index out of range")
 )
 
 // Dealer holds the state for Feldman's Verifiable Secret Sharing.
 type Dealer struct {
-	coefficients []*edwards25519.Scalar
-	Commitments  []*edwards25519.Point  // g^{a_k} for each coefficient
-	Shares       []*edwards25519.Scalar // f(i) for i = 1..n
+	coefficients []*ristretto255.Scalar
+	Commitments  []*ristretto255.Element // a_k * G for each coefficient
+	Shares       []*ristretto255.Scalar  // f(i) for i = 1..n
 }
 
-// NewDealer generates a random polynomial of degree t-1 and computes shares for n parties.
-func NewDealer(threshold, numParties int) *Dealer {
-	coeffs := make([]*edwards25519.Scalar, threshold)
-	commitments := make([]*edwards25519.Point, threshold)
-
-	for k := 0; k < threshold; k++ {
-		coeffs[k] = internal.RandomScalar()
-		commitments[k] = new(edwards25519.Point).ScalarBaseMult(coeffs[k])
+// NewDealer generates a random polynomial of degree threshold-1 and computes
+// shares for numParties parties. It requires 1 <= threshold <= numParties.
+func NewDealer(threshold, numParties int) (*Dealer, error) {
+	if err := checkThreshold(threshold, numParties); err != nil {
+		return nil, err
 	}
 
-	shares := make([]*edwards25519.Scalar, numParties)
+	coeffs := make([]*ristretto255.Scalar, threshold)
+	commitments := make([]*ristretto255.Element, threshold)
+	for k := range threshold {
+		coeffs[k] = internal.RandomScalar()
+		commitments[k] = ristretto255.NewIdentityElement().ScalarBaseMult(coeffs[k])
+	}
+
+	shares := make([]*ristretto255.Scalar, numParties)
 	for i := 1; i <= numParties; i++ {
-		shares[i-1] = evaluatePolynomial(coeffs, i)
+		s, err := evaluatePolynomial(coeffs, i)
+		if err != nil {
+			return nil, err
+		}
+		shares[i-1] = s
 	}
 
 	return &Dealer{
 		coefficients: coeffs,
 		Commitments:  commitments,
 		Shares:       shares,
-	}
+	}, nil
 }
 
 // Secret returns the secret value a_0.
-func (d *Dealer) Secret() *edwards25519.Scalar {
+func (d *Dealer) Secret() *ristretto255.Scalar {
 	return d.coefficients[0]
 }
 
-// PublicKey returns g^{a_0}.
-func (d *Dealer) PublicKey() *edwards25519.Point {
+// PublicKey returns a_0 * G.
+func (d *Dealer) PublicKey() *ristretto255.Element {
 	return d.Commitments[0]
 }
 
-// VerifyShare checks that share s_i is consistent with published commitments.
-// index is 1-based.
-func VerifyShare(share *edwards25519.Scalar, index int, commitments []*edwards25519.Point) bool {
-	lhs := new(edwards25519.Point).ScalarBaseMult(share)
-
-	rhs := edwards25519.NewIdentityPoint()
-	iPow := big.NewInt(1)
-	iBig := big.NewInt(int64(index))
-
-	for k, ck := range commitments {
-		if k > 0 {
-			iPow.Mul(iPow, iBig)
+// VerifyShare checks that share s_i is consistent with the published
+// commitments: s_i * G = Σ_k i^k * C_k (docs/protocol/threshold.md section
+// 1.4). index is the 1-based Shamir index.
+//
+// It returns false unless there are exactly threshold commitments, so a
+// dealer cannot publish a polynomial of higher degree than the threshold, and
+// unless index >= 1 and the share and every commitment are non-nil.
+func VerifyShare(share *ristretto255.Scalar, index, threshold int, commitments []*ristretto255.Element) bool {
+	if threshold < 1 || len(commitments) != threshold {
+		return false
+	}
+	if share == nil || checkIndex(index) != nil {
+		return false
+	}
+	for _, c := range commitments {
+		if c == nil {
+			return false
 		}
-		exp := scalarFromBigInt(iPow)
-		term := new(edwards25519.Point).ScalarMult(exp, ck)
-		rhs.Add(rhs, term)
 	}
 
+	x, err := internal.ScalarFromInt(index)
+	if err != nil {
+		return false
+	}
+	pow, err := internal.ScalarFromInt(1)
+	if err != nil {
+		return false
+	}
+	powers := make([]*ristretto255.Scalar, len(commitments))
+	for k := range commitments {
+		powers[k] = ristretto255.NewScalar().Set(pow)
+		pow.Multiply(pow, x)
+	}
+
+	lhs := ristretto255.NewIdentityElement().ScalarBaseMult(share)
+	rhs := ristretto255.NewIdentityElement().MultiScalarMult(powers, commitments)
 	return lhs.Equal(rhs) == 1
 }
 
-// LagrangeInterpolate reconstructs the secret from t shares.
-// indices are 1-based.
-func LagrangeInterpolate(shares []*edwards25519.Scalar, indices []int) *edwards25519.Scalar {
-	secret := edwards25519.NewScalar()
-	for i, si := range shares {
-		lambda := LagrangeCoefficient(indices, i)
-		term := new(edwards25519.Scalar).Multiply(lambda, si)
-		secret.Add(secret, term)
+// LagrangeInterpolate reconstructs f(0) from shares at the 1-based indices.
+func LagrangeInterpolate(shares []*ristretto255.Scalar, indices []int) (*ristretto255.Scalar, error) {
+	if len(shares) == 0 {
+		return nil, errors.New("threshold: no shares to interpolate")
 	}
-	return secret
+	if len(shares) != len(indices) {
+		return nil, fmt.Errorf("threshold: %d shares but %d indices", len(shares), len(indices))
+	}
+	if err := checkIndices(indices); err != nil {
+		return nil, err
+	}
+
+	secret := ristretto255.NewScalar()
+	for i, si := range shares {
+		if si == nil {
+			return nil, fmt.Errorf("threshold: share at position %d is nil", i)
+		}
+		lambda, err := lagrangeAt(indices, i)
+		if err != nil {
+			return nil, err
+		}
+		secret.Add(secret, ristretto255.NewScalar().Multiply(lambda, si))
+	}
+	return secret, nil
 }
 
-// LagrangeCoefficient computes the Lagrange basis coefficient for index myIdx
-// in the set of indices.
-func LagrangeCoefficient(indices []int, myIdx int) *edwards25519.Scalar {
-	q := edwards25519Order()
-	num := big.NewInt(1)
-	den := big.NewInt(1)
-	xi := big.NewInt(int64(indices[myIdx]))
+// LagrangeCoefficient computes the Lagrange basis coefficient at x = 0 for
+// indices[pos] within indices (docs/protocol/threshold.md section 5.1):
+//
+//	λ = Π_{j ≠ pos} x_j / (x_j - x_pos)  (mod q)
+//
+// Every index must be in 1..2^32-1 (else ErrBadIndex) and distinct (else
+// ErrDuplicateIndex), so no denominator is zero.
+func LagrangeCoefficient(indices []int, pos int) (*ristretto255.Scalar, error) {
+	if err := checkIndices(indices); err != nil {
+		return nil, err
+	}
+	if pos < 0 || pos >= len(indices) {
+		return nil, fmt.Errorf("threshold: position %d outside %d indices", pos, len(indices))
+	}
+	return lagrangeAt(indices, pos)
+}
 
-	for j, xj := range indices {
-		if j == myIdx {
+// lagrangeAt computes the coefficient for indices[pos]. The caller has
+// checked indices with checkIndices and pos against len(indices): distinct
+// indices of at most 2^32-1 are distinct mod q, so every x_j - x_pos is
+// non-zero and invertible.
+func lagrangeAt(indices []int, pos int) (*ristretto255.Scalar, error) {
+	xi, err := internal.ScalarFromInt(indices[pos])
+	if err != nil {
+		return nil, fmt.Errorf("threshold: index %d: %w", indices[pos], err)
+	}
+	num, err := internal.ScalarFromInt(1)
+	if err != nil {
+		return nil, err
+	}
+	den, err := internal.ScalarFromInt(1)
+	if err != nil {
+		return nil, err
+	}
+	for j, idx := range indices {
+		if j == pos {
 			continue
 		}
-		xjBig := big.NewInt(int64(xj))
-		num.Mul(num, xjBig)
-		num.Mod(num, q)
-		diff := new(big.Int).Sub(xjBig, xi)
-		diff.Mod(diff, q)
-		den.Mul(den, diff)
-		den.Mod(den, q)
+		xj, err := internal.ScalarFromInt(idx)
+		if err != nil {
+			return nil, fmt.Errorf("threshold: index %d: %w", idx, err)
+		}
+		num.Multiply(num, xj)
+		den.Multiply(den, ristretto255.NewScalar().Subtract(xj, xi))
 	}
-
-	denInv := new(big.Int).ModInverse(den, q)
-	result := new(big.Int).Mul(num, denInv)
-	result.Mod(result, q)
-
-	return scalarFromBigInt(result)
+	return num.Multiply(num, ristretto255.NewScalar().Invert(den)), nil
 }
 
-func evaluatePolynomial(coeffs []*edwards25519.Scalar, x int) *edwards25519.Scalar {
-	xScalar := internal.ScalarFromInt(x)
-	result := edwards25519.NewScalar()
+// checkThreshold requires 1 <= threshold <= numParties, with every party
+// index 1..numParties a valid trustee index.
+func checkThreshold(threshold, numParties int) error {
+	if threshold < 1 || threshold > numParties {
+		return fmt.Errorf("threshold: need 1 <= threshold (%d) <= numParties (%d)", threshold, numParties)
+	}
+	return checkIndex(numParties)
+}
+
+// checkIndex rejects a trustee index outside 1..2^32-1.
+func checkIndex(i int) error {
+	if i < 1 || uint64(i) > math.MaxUint32 {
+		return fmt.Errorf("index %d: %w", i, ErrBadIndex)
+	}
+	return nil
+}
+
+// checkIndices checks every index with checkIndex, then rejects duplicates.
+func checkIndices(indices []int) error {
+	for _, idx := range indices {
+		if err := checkIndex(idx); err != nil {
+			return err
+		}
+	}
+	seen := make(map[int]bool, len(indices))
+	for _, idx := range indices {
+		if seen[idx] {
+			return fmt.Errorf("index %d: %w", idx, ErrDuplicateIndex)
+		}
+		seen[idx] = true
+	}
+	return nil
+}
+
+func evaluatePolynomial(coeffs []*ristretto255.Scalar, x int) (*ristretto255.Scalar, error) {
+	xScalar, err := internal.ScalarFromInt(x)
+	if err != nil {
+		return nil, fmt.Errorf("threshold: evaluating at %d: %w", x, err)
+	}
+	result := ristretto255.NewScalar()
 	for k := len(coeffs) - 1; k >= 0; k-- {
 		result.Multiply(result, xScalar)
 		result.Add(result, coeffs[k])
 	}
-	return result
-}
-
-func edwards25519Order() *big.Int {
-	q, _ := new(big.Int).SetString("7237005577332262213973186563042994240857116359379907606001950938285454250989", 10)
-	return q
-}
-
-func scalarFromBigInt(n *big.Int) *edwards25519.Scalar {
-	q := edwards25519Order()
-	n = new(big.Int).Mod(n, q)
-	var buf [32]byte
-	b := n.Bytes()
-	for i, v := range b {
-		buf[len(b)-1-i] = v
-	}
-	s, err := edwards25519.NewScalar().SetCanonicalBytes(buf[:])
-	if err != nil {
-		panic("scalarFromBigInt: " + err.Error())
-	}
-	return s
+	return result, nil
 }

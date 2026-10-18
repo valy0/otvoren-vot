@@ -48,7 +48,7 @@ Replace the verifier's random challenge with a hash of the commitment and public
 e = H(x || A)
 ```
 
-where H is a cryptographic hash function (SHA-512 mod q, using libsodium's `crypto_hash_sha512` then reducing modulo the Ristretto255 group order).
+where H is a cryptographic hash function (SHA-512 reduced modulo the Ristretto255 group order via `SetUniformBytes`).
 
 The non-interactive proof is the tuple π = (A, z). The verifier recomputes e = H(x || A) and checks the verification equation.
 
@@ -58,7 +58,7 @@ The non-interactive proof is the tuple π = (A, z). The verifier recomputes e = 
 e = H("otvoren-vot.ballot-binary-proof" || x || A)
 ```
 
-Each proof type uses a distinct domain separator.
+Each proof type uses a distinct domain separator. The exact byte-level transcript of every proof, including the election, ballot and statement-index context that binds a proof to its place in a ballot, is specified in [fiat-shamir.md](fiat-shamir.md). Every `H(...)` or `H_hash(...)` expression in this document (including the batching sketches in section 7) is illustrative shorthand; where it conflicts with fiat-shamir.md, fiat-shamir.md is normative.
 
 ---
 
@@ -103,7 +103,8 @@ STEP 1 — Commitment:
     B₁ = z₁·H - e₁·(C₂ - G)
 
 STEP 2 — Challenge:
-    e = H_hash("otvoren-vot.ballot-binary-proof" || C₁ || C₂ || A₀ || B₀ || A₁ || B₁)
+    e = FiatShamir(binary-proof transcript of fiat-shamir.md:
+        context, pk, C₁, C₂, A₀, B₀, A₁, B₁)
     e₀ = e - e₁ (mod q)
 
 STEP 3 — Response:
@@ -129,7 +130,8 @@ STEP 1 — Commitment:
     B₁ = k₁·H
 
 STEP 2 — Challenge:
-    e = H_hash("otvoren-vot.ballot-binary-proof" || C₁ || C₂ || A₀ || B₀ || A₁ || B₁)
+    e = FiatShamir(binary-proof transcript of fiat-shamir.md:
+        context, pk, C₁, C₂, A₀, B₀, A₁, B₁)
     e₁ = e - e₀ (mod q)
 
 STEP 3 — Response:
@@ -142,7 +144,7 @@ Given ciphertext (C₁, C₂) and proof π = (A₀, B₀, A₁, B₁, e₀, e₁
 
 ```
 1. Recompute challenge:
-   e = H_hash("otvoren-vot.ballot-binary-proof" || C₁ || C₂ || A₀ || B₀ || A₁ || B₁)
+   e = FiatShamir(same binary-proof transcript: context, pk, C₁, C₂, A₀, B₀, A₁, B₁)
 
 2. Check challenge partition:
    e₀ + e₁ ≡ e (mod q)
@@ -214,7 +216,8 @@ STEP 1 — Commitment:
     B = k·H
 
 STEP 2 — Challenge:
-    e = H_hash("otvoren-vot.ballot-sum-proof" || C₁_sum || C₂_sum || A || B)
+    e = FiatShamir(transcript of fiat-shamir.md, "Sum-Equals-One Proof":
+        context, pk, C₁_sum, C₂_sum, A, B)
 
 STEP 3 — Response:
     z = k + e·R (mod q)
@@ -226,7 +229,7 @@ Proof: π_sum = (A, B, z)
 
 ```
 1. Recompute:
-   e = H_hash("otvoren-vot.ballot-sum-proof" || C₁_sum || C₂_sum || A || B)
+   e = FiatShamir(same transcript: context, pk, C₁_sum, C₂_sum, A, B)
 
 2. Check:
    z·G = A + e·C₁_sum
@@ -571,7 +574,7 @@ For the current parameter range (N ≤ 50, K_total ≤ 2500):
 All random nonces (k values in Sigma protocol commitments) MUST be generated using a cryptographically secure random number generator:
 
 - **Browser (TypeScript):** `crypto.getRandomValues()` to fill a 32-byte buffer, then reduce modulo q using libsodium's `crypto_core_ristretto255_scalar_random()`.
-- **Server (Go):** `crypto/rand.Read()` or `filippo.io/edwards25519` scalar random functions.
+- **Server (Go):** 64 bytes read from `crypto/rand`, then reduced with `Scalar.SetUniformBytes` (`github.com/gtank/ristretto255`).
 
 **Nonce reuse is catastrophic.** If the same nonce k is used in two different proofs, the secret witness (randomness r or message m) can be extracted from the two transcripts.
 
@@ -612,3 +615,30 @@ The ballot submission payload contains proofs in a canonical order:
 ```
 
 All group elements and scalars are encoded as 32-byte little-endian arrays, then base64url-encoded for JSON transport.
+
+### 8.4 Statement indices
+
+Each ballot proof carries a statement `index` (a `u32`) in its Fiat-Shamir context (see [fiat-shamir.md](fiat-shamir.md)). Indices follow the canonical ciphertext slot order.
+
+**Notation.** `P` is `N_parties` of section 4.1, and `C_p` (0-based `p`) is `K_{p+1}` of section 4.1 (which numbers parties from 1).
+
+**Canonical slot order.** With `P` parties, `C_q` candidates in party `q`:
+
+1. Party slots `0..P`: `P + 1` slots, where slot `P` is the blank slot.
+2. Then, for `p = 0..P-1`, party `p`'s candidate slots `0..C_p-1`.
+
+**Indices.**
+
+- Slot `j` of the party vector has index `j` (so the blank slot has index `P`).
+- Candidate `c` of party `p` has index `P + 1 + Σ_{q<p} C_q + c`.
+
+**Which proof uses which index.**
+
+| Proof | Index |
+|-------|-------|
+| Binary proof on slot `i` (party or candidate) | `i`, the slot index above |
+| Party sum proof | `0` |
+| Candidate-sum proof for party `p` | `p` |
+| Conditional consistency proof for party `p` | `p` |
+
+The extension's nonce derivation (PR 9) uses the same slot order.

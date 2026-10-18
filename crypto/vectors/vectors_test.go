@@ -1,24 +1,33 @@
 package vectors
 
 import (
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"os"
+	"strconv"
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/elgamal"
+	"github.com/valy0/otvoren-vot/crypto/group"
 	"github.com/valy0/otvoren-vot/crypto/internal"
 	"github.com/valy0/otvoren-vot/crypto/proof"
 )
 
 // Vectors is the top-level test vector structure for cross-language interop.
+// Every binary value is lowercase hex. The TypeScript client (PR 2b) consumes
+// this exact schema.
 type Vectors struct {
 	ScalarBaseMult []ScalarBaseMultVector `json:"scalar_base_mult"`
 	ElGamalEncrypt []ElGamalEncryptVector `json:"elgamal_encrypt"`
 	FiatShamir     []FiatShamirVector     `json:"fiat_shamir"`
 	BinaryProof    []BinaryProofVector    `json:"binary_proof"`
+	SumOneProof    []SumOneProofVector    `json:"sum_one_proof"`
 	CandidateSum   []CandidateSumVector   `json:"candidate_sum_proof"`
 	Consistency    []ConsistencyVector    `json:"consistency_proof"`
 }
@@ -42,6 +51,18 @@ type FiatShamirVector struct {
 	ExpectedScalarHex string   `json:"expected_scalar_hex"`
 }
 
+// ContextFields is the ballot-proof context of docs/protocol/fiat-shamir.md.
+type ContextFields struct {
+	ElectionID string `json:"election_id"`
+	BallotID   string `json:"ballot_id"`
+	Index      uint32 `json:"index"`
+}
+
+type CiphertextFields struct {
+	C1Hex string `json:"c1_hex"`
+	C2Hex string `json:"c2_hex"`
+}
+
 type BinaryProofFields struct {
 	A0Hex string `json:"a0_hex"`
 	B0Hex string `json:"b0_hex"`
@@ -53,110 +74,145 @@ type BinaryProofFields struct {
 	Z1Hex string `json:"z1_hex"`
 }
 
+type SumOneProofFields struct {
+	AHex string `json:"a_hex"`
+	BHex string `json:"b_hex"`
+	ZHex string `json:"z_hex"`
+}
+
 type BinaryProofVector struct {
-	Domain        string            `json:"domain"`
-	PublicKeyHex  string            `json:"public_key_hex"`
-	RandomnessHex string            `json:"randomness_hex"`
-	Message       int               `json:"message"`
-	CiphertextC1  string            `json:"ciphertext_c1_hex"`
-	CiphertextC2  string            `json:"ciphertext_c2_hex"`
-	ExpectedProof BinaryProofFields `json:"expected_proof"`
+	Context      ContextFields     `json:"context"`
+	PublicKeyHex string            `json:"public_key_hex"`
+	Message      int               `json:"message"`
+	CiphertextC1 string            `json:"ciphertext_c1_hex"`
+	CiphertextC2 string            `json:"ciphertext_c2_hex"`
+	Proof        BinaryProofFields `json:"proof"`
+}
+
+type SumOneProofVector struct {
+	Context      ContextFields      `json:"context"`
+	PublicKeyHex string             `json:"public_key_hex"`
+	Ciphertexts  []CiphertextFields `json:"ciphertexts"`
+	Proof        SumOneProofFields  `json:"proof"`
 }
 
 type CandidateSumVector struct {
-	PublicKeyHex    string            `json:"public_key_hex"`
-	CandRandomHexes []string          `json:"cand_randomness_hexes"`
-	CandMessages    []int             `json:"cand_messages"`
-	AggC1Hex        string            `json:"agg_c1_hex"`
-	AggC2Hex        string            `json:"agg_c2_hex"`
-	Sum             int               `json:"sum"`
-	ExpectedProof   BinaryProofFields `json:"expected_proof"`
+	Context      ContextFields     `json:"context"`
+	PublicKeyHex string            `json:"public_key_hex"`
+	AggC1Hex     string            `json:"agg_c1_hex"`
+	AggC2Hex     string            `json:"agg_c2_hex"`
+	Sum          int               `json:"sum"`
+	Proof        BinaryProofFields `json:"proof"`
 }
 
 type ConsistencyVector struct {
-	PublicKeyHex    string            `json:"public_key_hex"`
-	PartyRandHex    string            `json:"party_randomness_hex"`
-	PartyMessage    int               `json:"party_message"`
-	PartyCt         [2]string         `json:"party_ciphertext_hex"`
-	CandRandomHexes []string          `json:"cand_randomness_hexes"`
-	CandMessages    []int             `json:"cand_messages"`
-	CandSumCt       [2]string         `json:"cand_sum_ciphertext_hex"`
-	Diff            int               `json:"diff"`
-	ExpectedProof   BinaryProofFields `json:"expected_proof"`
+	Context           ContextFields     `json:"context"`
+	PublicKeyHex      string            `json:"public_key_hex"`
+	PartyCiphertext   CiphertextFields  `json:"party_ciphertext"`
+	CandSumCiphertext CiphertextFields  `json:"cand_sum_ciphertext"`
+	Diff              int               `json:"diff"`
+	Proof             BinaryProofFields `json:"proof"`
 }
 
-func hexEncode(b []byte) string {
-	return hex.EncodeToString(b)
+const (
+	asciiElection    = "election-2027-national-assembly"
+	cyrillicElection = "избори-2027-народно-събрание"
+)
+
+func hexEncode(b []byte) string { return hex.EncodeToString(b) }
+
+// deterministicScalar derives a scalar from a label: SHA-512 of the label,
+// reduced with SetUniformBytes. Keys and randomness are reproducible; only
+// the proof nonces are random.
+func deterministicScalar(label string) *ristretto255.Scalar {
+	digest := sha512.Sum512([]byte("otvoren-vot.test-vectors." + label))
+	s, err := ristretto255.NewScalar().SetUniformBytes(digest[:])
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
-// deterministicScalar creates a scalar from a fixed seed via hash-to-scalar.
-// This gives reproducible values for vector generation.
-func deterministicScalar(label string) *edwards25519.Scalar {
-	return internal.HashToScalar([]byte("otvoren-vot.test-vectors"), []byte(label))
+// ballotID is base64url (unpadded) of SHA-256(label): 43 characters.
+func ballotID(label string) string {
+	sum := sha256.Sum256([]byte(label))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func ctxFields(c proof.Context) ContextFields {
+	return ContextFields{ElectionID: c.ElectionID, BallotID: c.BallotID, Index: c.Index}
+}
+
+func (c ContextFields) toContext() proof.Context {
+	return proof.Context{ElectionID: c.ElectionID, BallotID: c.BallotID, Index: c.Index}
+}
+
+func ctFields(ct *elgamal.Ciphertext) CiphertextFields {
+	return CiphertextFields{C1Hex: hexEncode(ct.C1.Bytes()), C2Hex: hexEncode(ct.C2.Bytes())}
 }
 
 func binaryProofFields(p *proof.BinaryProof) BinaryProofFields {
 	return BinaryProofFields{
-		A0Hex: hexEncode(p.A0.Bytes()),
-		B0Hex: hexEncode(p.B0.Bytes()),
-		A1Hex: hexEncode(p.A1.Bytes()),
-		B1Hex: hexEncode(p.B1.Bytes()),
-		E0Hex: hexEncode(p.E0.Bytes()),
-		E1Hex: hexEncode(p.E1.Bytes()),
-		Z0Hex: hexEncode(p.Z0.Bytes()),
-		Z1Hex: hexEncode(p.Z1.Bytes()),
+		A0Hex: hexEncode(p.A0.Bytes()), B0Hex: hexEncode(p.B0.Bytes()),
+		A1Hex: hexEncode(p.A1.Bytes()), B1Hex: hexEncode(p.B1.Bytes()),
+		E0Hex: hexEncode(p.E0.Bytes()), E1Hex: hexEncode(p.E1.Bytes()),
+		Z0Hex: hexEncode(p.Z0.Bytes()), Z1Hex: hexEncode(p.Z1.Bytes()),
 	}
 }
 
 var update = flag.Bool("update", false, "rewrite testdata/vectors.json from the Go implementation")
 
-// TestGenerateVectors produces deterministic test vectors and writes them to testdata/vectors.json.
+// TestGenerateVectors produces test vectors and writes them to testdata/vectors.json.
 // Run: go test ./vectors/ -run TestGenerateVectors -update -v
 //
-// The vectors are generated once in Go and checked into the repo. The TypeScript
-// implementation loads them and verifies its own crypto produces identical results
-// (for deterministic operations) or successfully verifies (for proofs).
+// Keys and encryption randomness are deterministic; proof nonces are random,
+// so the proof fields differ on every regeneration. The TypeScript
+// implementation verifies the proofs and reproduces the deterministic values.
 func TestGenerateVectors(t *testing.T) {
 	if !*update {
 		t.Skip("run with -update to regenerate")
 	}
 	var v Vectors
 
-	// --- Scalar base multiplication vectors ---
-	scalarInputs := []struct {
-		label string
-		value int
-	}{
-		{"one", 1},
-		{"two", 2},
-		{"forty-two", 42},
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	for _, si := range scalarInputs {
-		s := internal.ScalarFromInt(si.value)
-		p := new(edwards25519.Point).ScalarBaseMult(s)
+	mustCt := func(pk *ristretto255.Element, m int, r *ristretto255.Scalar) *elgamal.Ciphertext {
+		t.Helper()
+		ct, err := elgamal.EncryptWithRandomness(pk, m, r)
+		must(err)
+		return ct
+	}
+
+	// --- Scalar base multiplication vectors ---
+	var scalars []*ristretto255.Scalar
+	for _, n := range []int{1, 2, 42} {
+		s, err := internal.ScalarFromInt(n)
+		must(err)
+		scalars = append(scalars, s)
+	}
+	scalars = append(scalars, deterministicScalar("scalar-base-mult-big"))
+	for _, s := range scalars {
+		p := ristretto255.NewIdentityElement().ScalarBaseMult(s)
 		v.ScalarBaseMult = append(v.ScalarBaseMult, ScalarBaseMultVector{
 			ScalarHex:        hexEncode(s.Bytes()),
 			ExpectedPointHex: hexEncode(p.Bytes()),
 		})
 	}
 
-	// Also add a hash-derived scalar for non-trivial values.
-	bigScalar := deterministicScalar("scalar-base-mult-big")
-	bigPoint := new(edwards25519.Point).ScalarBaseMult(bigScalar)
-	v.ScalarBaseMult = append(v.ScalarBaseMult, ScalarBaseMultVector{
-		ScalarHex:        hexEncode(bigScalar.Bytes()),
-		ExpectedPointHex: hexEncode(bigPoint.Bytes()),
-	})
-
 	// --- ElGamal encryption vectors ---
 	privKey := deterministicScalar("election-private-key")
-	pubKey := new(edwards25519.Point).ScalarBaseMult(privKey)
+	pubKey := ristretto255.NewIdentityElement().ScalarBaseMult(privKey)
+	pkHex := hexEncode(pubKey.Bytes())
 
 	for _, m := range []int{0, 1} {
-		r := deterministicScalar("elgamal-randomness-" + string(rune('0'+m)))
-		ct := elgamal.EncryptWithRandomness(pubKey, m, r)
+		r := deterministicScalar("elgamal-randomness-" + itoa(m))
+		ct := mustCt(pubKey, m, r)
 		v.ElGamalEncrypt = append(v.ElGamalEncrypt, ElGamalEncryptVector{
-			PublicKeyHex:  hexEncode(pubKey.Bytes()),
+			PublicKeyHex:  pkHex,
 			RandomnessHex: hexEncode(r.Bytes()),
 			Message:       m,
 			ExpectedC1Hex: hexEncode(ct.C1.Bytes()),
@@ -167,297 +223,392 @@ func TestGenerateVectors(t *testing.T) {
 	// --- Fiat-Shamir vectors ---
 	fsData1, _ := hex.DecodeString("aabbccdd")
 	fsData2, _ := hex.DecodeString("11223344")
-	fsResult := internal.FiatShamir("otvoren-vot.test", fsData1)
-	v.FiatShamir = append(v.FiatShamir, FiatShamirVector{
-		Domain:            "otvoren-vot.test",
-		DataHex:           []string{"aabbccdd"},
-		ExpectedScalarHex: hexEncode(fsResult.Bytes()),
-	})
-
-	fsResult2 := internal.FiatShamir("otvoren-vot.test", fsData1, fsData2)
-	v.FiatShamir = append(v.FiatShamir, FiatShamirVector{
-		Domain:            "otvoren-vot.test",
-		DataHex:           []string{"aabbccdd", "11223344"},
-		ExpectedScalarHex: hexEncode(fsResult2.Bytes()),
-	})
-
-	// Empty data vector.
-	fsResult3 := internal.FiatShamir("otvoren-vot.empty-test")
-	v.FiatShamir = append(v.FiatShamir, FiatShamirVector{
-		Domain:            "otvoren-vot.empty-test",
-		DataHex:           []string{},
-		ExpectedScalarHex: hexEncode(fsResult3.Bytes()),
-	})
-
-	// --- Binary proof vectors (verify-only) ---
-	// Generate a proof with fixed key and randomness. The proof itself uses
-	// internal random nonces so it is not deterministic, but the verifier
-	// only needs the ciphertext, public key, and proof fields.
-	for _, m := range []int{0, 1} {
-		r := deterministicScalar("binary-proof-randomness-" + string(rune('0'+m)))
-		ct := elgamal.EncryptWithRandomness(pubKey, m, r)
-		bp := proof.ProveBinary(pubKey, ct, m, r)
-
-		// Sanity check: proof must verify.
-		if !proof.VerifyBinary(pubKey, ct, bp) {
-			t.Fatalf("generated binary proof for m=%d does not verify", m)
-		}
-
-		v.BinaryProof = append(v.BinaryProof, BinaryProofVector{
-			Domain:        "otvoren-vot.ballot-binary-proof",
-			PublicKeyHex:  hexEncode(pubKey.Bytes()),
-			RandomnessHex: hexEncode(r.Bytes()),
-			Message:       m,
-			CiphertextC1:  hexEncode(ct.C1.Bytes()),
-			CiphertextC2:  hexEncode(ct.C2.Bytes()),
-			ExpectedProof: binaryProofFields(bp),
+	for _, c := range []struct {
+		domain string
+		data   [][]byte
+		hexes  []string
+	}{
+		{"otvoren-vot.test", [][]byte{fsData1}, []string{"aabbccdd"}},
+		{"otvoren-vot.test", [][]byte{fsData1, fsData2}, []string{"aabbccdd", "11223344"}},
+		{"otvoren-vot.empty-test", nil, []string{}},
+	} {
+		v.FiatShamir = append(v.FiatShamir, FiatShamirVector{
+			Domain:            c.domain,
+			DataHex:           c.hexes,
+			ExpectedScalarHex: hexEncode(internal.FiatShamir(c.domain, c.data...).Bytes()),
 		})
+	}
+
+	// Contexts: one ASCII and one Cyrillic election per proof kind.
+	elections := []string{asciiElection, cyrillicElection}
+	newCtx := func(election, kind string, idx uint32) proof.Context {
+		return proof.Context{ElectionID: election, BallotID: ballotID(kind + "/" + election), Index: idx}
+	}
+
+	// --- Binary proof vectors ---
+	for ei, election := range elections {
+		for _, m := range []int{0, 1} {
+			label := "binary-" + itoa(ei) + "-" + itoa(m)
+			r := deterministicScalar(label + "-r")
+			ct := mustCt(pubKey, m, r)
+			ctx := newCtx(election, label, uint32(ei*2+m))
+			bp, err := proof.ProveBinary(ctx, pubKey, ct, m, r)
+			must(err)
+			must(proof.VerifyBinary(ctx, pubKey, ct, bp))
+			v.BinaryProof = append(v.BinaryProof, BinaryProofVector{
+				Context:      ctxFields(ctx),
+				PublicKeyHex: pkHex,
+				Message:      m,
+				CiphertextC1: hexEncode(ct.C1.Bytes()),
+				CiphertextC2: hexEncode(ct.C2.Bytes()),
+				Proof:        binaryProofFields(bp),
+			})
+		}
+	}
+
+	// --- Sum-equals-one proof vectors (3 ciphertexts, the hot one varies) ---
+	for ei, election := range elections {
+		for hot := 0; hot < 3; hot += 2 {
+			label := "sum-one-" + itoa(ei) + "-" + itoa(hot)
+			cts := make([]*elgamal.Ciphertext, 3)
+			rs := make([]*ristretto255.Scalar, 3)
+			for i := range cts {
+				m := 0
+				if i == hot {
+					m = 1
+				}
+				rs[i] = deterministicScalar(label + "-r-" + itoa(i))
+				cts[i] = mustCt(pubKey, m, rs[i])
+			}
+			ctx := newCtx(election, label, 7)
+			sp, err := proof.ProveSumOne(ctx, pubKey, cts, internal.SumScalars(rs))
+			must(err)
+			must(proof.VerifySumOne(ctx, pubKey, cts, sp))
+			sv := SumOneProofVector{
+				Context:      ctxFields(ctx),
+				PublicKeyHex: pkHex,
+				Proof: SumOneProofFields{
+					AHex: hexEncode(sp.A.Bytes()),
+					BHex: hexEncode(sp.B.Bytes()),
+					ZHex: hexEncode(sp.Z.Bytes()),
+				},
+			}
+			for _, ct := range cts {
+				sv.Ciphertexts = append(sv.Ciphertexts, ctFields(ct))
+			}
+			v.SumOneProof = append(v.SumOneProof, sv)
+		}
+	}
+
+	// candVector encrypts numCand candidate bits with a 1 at position hot
+	// (hot < 0: all zero) and returns the aggregate and summed randomness.
+	candVector := func(label string, numCand, hot int) (*elgamal.Ciphertext, *ristretto255.Scalar) {
+		cts := make([]*elgamal.Ciphertext, numCand)
+		rs := make([]*ristretto255.Scalar, numCand)
+		for i := range cts {
+			m := 0
+			if i == hot {
+				m = 1
+			}
+			rs[i] = deterministicScalar(label + "-r-" + itoa(i))
+			cts[i] = mustCt(pubKey, m, rs[i])
+		}
+		return elgamal.HomomorphicAdd(cts...), internal.SumScalars(rs)
 	}
 
 	// --- Candidate sum proof vectors ---
-	for _, candSum := range []int{0, 1} {
-		numCand := 3
-		candRHexes := make([]string, numCand)
-		candMsgs := make([]int, numCand)
-		candCts := make([]*elgamal.Ciphertext, numCand)
-		candRs := make([]*edwards25519.Scalar, numCand)
-
-		for i := range numCand {
-			m := 0
-			if candSum == 1 && i == 0 {
-				m = 1
+	for ei, election := range elections {
+		for _, sum := range []int{0, 1} {
+			label := "candidate-sum-" + itoa(ei) + "-" + itoa(sum)
+			hot := -1
+			if sum == 1 {
+				hot = 0
 			}
-			candMsgs[i] = m
-			r := deterministicScalar("candidate-sum-r-" + string(rune('0'+candSum)) + "-" + string(rune('0'+i)))
-			candRs[i] = r
-			candRHexes[i] = hexEncode(r.Bytes())
-			candCts[i] = elgamal.EncryptWithRandomness(pubKey, m, r)
+			agg, rSum := candVector(label, 3, hot)
+			ctx := newCtx(election, label, uint32(ei*2+sum))
+			cp, err := proof.ProveCandidateSum(ctx, pubKey, agg, sum, rSum)
+			must(err)
+			must(proof.VerifyCandidateSum(ctx, pubKey, agg, cp))
+			v.CandidateSum = append(v.CandidateSum, CandidateSumVector{
+				Context:      ctxFields(ctx),
+				PublicKeyHex: pkHex,
+				AggC1Hex:     hexEncode(agg.C1.Bytes()),
+				AggC2Hex:     hexEncode(agg.C2.Bytes()),
+				Sum:          sum,
+				Proof:        binaryProofFields(cp),
+			})
 		}
-
-		aggCt := elgamal.HomomorphicAdd(candCts...)
-		rSum := internal.SumScalars(candRs)
-		csProof := proof.ProveCandidateSum(pubKey, aggCt, candSum, rSum)
-
-		if !proof.VerifyCandidateSum(pubKey, aggCt, csProof) {
-			t.Fatalf("generated candidate sum proof for sum=%d does not verify", candSum)
-		}
-
-		v.CandidateSum = append(v.CandidateSum, CandidateSumVector{
-			PublicKeyHex:    hexEncode(pubKey.Bytes()),
-			CandRandomHexes: candRHexes,
-			CandMessages:    candMsgs,
-			AggC1Hex:        hexEncode(aggCt.C1.Bytes()),
-			AggC2Hex:        hexEncode(aggCt.C2.Bytes()),
-			Sum:             candSum,
-			ExpectedProof:   binaryProofFields(csProof),
-		})
 	}
 
-	// --- Consistency proof vectors ---
-	type consistencyCase struct {
-		partyMsg int
-		candSum  int
-	}
-	cases := []consistencyCase{
-		{0, 0}, // diff=0
-		{1, 0}, // diff=1
-		{1, 1}, // diff=0
-	}
-
-	for ci, cc := range cases {
-		rParty := deterministicScalar("consistency-party-r-" + string(rune('0'+ci)))
-		partyCt := elgamal.EncryptWithRandomness(pubKey, cc.partyMsg, rParty)
-
-		numCand := 2
-		candRHexes := make([]string, numCand)
-		candMsgs := make([]int, numCand)
-		candCts := make([]*elgamal.Ciphertext, numCand)
-		candRs := make([]*edwards25519.Scalar, numCand)
-
-		for i := range numCand {
-			m := 0
-			if cc.candSum == 1 && i == 0 {
-				m = 1
+	// --- Consistency proof vectors (diff = party bit - candidate sum) ---
+	for ei, election := range elections {
+		for ci, cc := range []struct{ partyMsg, candSum int }{{0, 0}, {1, 0}, {1, 1}} {
+			label := "consistency-" + itoa(ei) + "-" + itoa(ci)
+			rParty := deterministicScalar(label + "-party-r")
+			partyCt := mustCt(pubKey, cc.partyMsg, rParty)
+			hot := -1
+			if cc.candSum == 1 {
+				hot = 0
 			}
-			candMsgs[i] = m
-			r := deterministicScalar("consistency-cand-r-" + string(rune('0'+ci)) + "-" + string(rune('0'+i)))
-			candRs[i] = r
-			candRHexes[i] = hexEncode(r.Bytes())
-			candCts[i] = elgamal.EncryptWithRandomness(pubKey, m, r)
+			candSumCt, rCand := candVector(label, 2, hot)
+			rDiff := ristretto255.NewScalar().Subtract(rParty, rCand)
+			diff := cc.partyMsg - cc.candSum
+			ctx := newCtx(election, label, uint32(ci))
+			cp, err := proof.ProveConsistency(ctx, pubKey, partyCt, candSumCt, diff, rDiff)
+			must(err)
+			must(proof.VerifyConsistency(ctx, pubKey, partyCt, candSumCt, cp))
+			v.Consistency = append(v.Consistency, ConsistencyVector{
+				Context:           ctxFields(ctx),
+				PublicKeyHex:      pkHex,
+				PartyCiphertext:   ctFields(partyCt),
+				CandSumCiphertext: ctFields(candSumCt),
+				Diff:              diff,
+				Proof:             binaryProofFields(cp),
+			})
 		}
-
-		candSumCt := elgamal.HomomorphicAdd(candCts...)
-		rCandSum := internal.SumScalars(candRs)
-		rDiff := new(edwards25519.Scalar).Subtract(rParty, rCandSum)
-		diff := cc.partyMsg - cc.candSum
-
-		conProof := proof.ProveConsistency(pubKey, partyCt, candSumCt, diff, rDiff)
-
-		if !proof.VerifyConsistency(pubKey, partyCt, candSumCt, conProof) {
-			t.Fatalf("generated consistency proof for case %d does not verify", ci)
-		}
-
-		v.Consistency = append(v.Consistency, ConsistencyVector{
-			PublicKeyHex:    hexEncode(pubKey.Bytes()),
-			PartyRandHex:    hexEncode(rParty.Bytes()),
-			PartyMessage:    cc.partyMsg,
-			PartyCt:         [2]string{hexEncode(partyCt.C1.Bytes()), hexEncode(partyCt.C2.Bytes())},
-			CandRandomHexes: candRHexes,
-			CandMessages:    candMsgs,
-			CandSumCt:       [2]string{hexEncode(candSumCt.C1.Bytes()), hexEncode(candSumCt.C2.Bytes())},
-			Diff:            diff,
-			ExpectedProof:   binaryProofFields(conProof),
-		})
 	}
 
-	// Write vectors to JSON.
 	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		t.Fatal("failed to marshal vectors:", err)
-	}
-
-	outPath := "testdata/vectors.json"
-	if err := os.WriteFile(outPath, data, 0644); err != nil {
-		t.Fatal("failed to write vectors.json:", err)
-	}
-
-	t.Logf("wrote %d bytes to %s", len(data), outPath)
+	must(err)
+	data = append(data, '\n')
+	must(os.WriteFile("testdata/vectors.json", data, 0o644))
+	t.Logf("wrote %d bytes to testdata/vectors.json", len(data))
 }
 
-// TestVerifyVectors loads vectors.json and verifies the deterministic values
-// are correct and the proofs verify.
-func TestVerifyVectors(t *testing.T) {
+func loadVectors(t *testing.T) Vectors {
+	t.Helper()
 	data, err := os.ReadFile("testdata/vectors.json")
 	if err != nil {
 		t.Fatal("testdata/vectors.json not found; run: go test ./vectors/ -run TestGenerateVectors -update")
 	}
-
 	var v Vectors
 	if err := json.Unmarshal(data, &v); err != nil {
 		t.Fatal("failed to unmarshal vectors.json:", err)
 	}
+	return v
+}
 
-	// Verify scalar base mult vectors.
+func hasNonASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return true
+		}
+	}
+	return false
+}
+
+// TestVectorsIncludeNonASCIIContext requires, per proof kind, one vector with a
+// non-ASCII election_id and one with an ASCII one, and well-formed ballot ids.
+func TestVectorsIncludeNonASCIIContext(t *testing.T) {
+	v := loadVectors(t)
+	kinds := map[string][]ContextFields{}
+	for _, x := range v.BinaryProof {
+		kinds["binary_proof"] = append(kinds["binary_proof"], x.Context)
+	}
+	for _, x := range v.SumOneProof {
+		kinds["sum_one_proof"] = append(kinds["sum_one_proof"], x.Context)
+	}
+	for _, x := range v.CandidateSum {
+		kinds["candidate_sum_proof"] = append(kinds["candidate_sum_proof"], x.Context)
+	}
+	for _, x := range v.Consistency {
+		kinds["consistency_proof"] = append(kinds["consistency_proof"], x.Context)
+	}
+	for _, kind := range []string{"binary_proof", "sum_one_proof", "candidate_sum_proof", "consistency_proof"} {
+		var nonASCII, ascii bool
+		for _, c := range kinds[kind] {
+			if hasNonASCII(c.ElectionID) {
+				nonASCII = true
+			} else {
+				ascii = true
+			}
+			raw, err := base64.RawURLEncoding.DecodeString(c.BallotID)
+			if err != nil || len(c.BallotID) != 43 || len(raw) != 32 {
+				t.Fatalf("%s: ballot_id %q is not 43-char unpadded base64url of 32 bytes", kind, c.BallotID)
+			}
+		}
+		if !nonASCII {
+			t.Errorf("%s: no vector with a non-ASCII election_id", kind)
+		}
+		if !ascii {
+			t.Errorf("%s: no vector with an ASCII election_id", kind)
+		}
+	}
+}
+
+func dElement(t *testing.T, where, h string) *ristretto255.Element {
+	t.Helper()
+	b, err := hex.DecodeString(h)
+	if err != nil {
+		t.Fatalf("%s: bad hex: %v", where, err)
+	}
+	e, err := group.DecodeElement(b)
+	if err != nil {
+		t.Fatalf("%s: bad element: %v", where, err)
+	}
+	return e
+}
+
+func dScalar(t *testing.T, where, h string) *ristretto255.Scalar {
+	t.Helper()
+	b, err := hex.DecodeString(h)
+	if err != nil {
+		t.Fatalf("%s: bad hex: %v", where, err)
+	}
+	s, err := group.DecodeScalar(b)
+	if err != nil {
+		t.Fatalf("%s: bad scalar: %v", where, err)
+	}
+	return s
+}
+
+func dCiphertext(t *testing.T, where string, c CiphertextFields) *elgamal.Ciphertext {
+	t.Helper()
+	b, err := hex.DecodeString(c.C1Hex + c.C2Hex)
+	if err != nil {
+		t.Fatalf("%s: bad hex: %v", where, err)
+	}
+	ct, err := elgamal.CiphertextFromBytes(b)
+	if err != nil {
+		t.Fatalf("%s: bad ciphertext: %v", where, err)
+	}
+	return ct
+}
+
+func decodeBinaryProof(t *testing.T, where string, f BinaryProofFields) *proof.BinaryProof {
+	t.Helper()
+	return &proof.BinaryProof{
+		A0: dElement(t, where+".a0", f.A0Hex), B0: dElement(t, where+".b0", f.B0Hex),
+		A1: dElement(t, where+".a1", f.A1Hex), B1: dElement(t, where+".b1", f.B1Hex),
+		E0: dScalar(t, where+".e0", f.E0Hex), E1: dScalar(t, where+".e1", f.E1Hex),
+		Z0: dScalar(t, where+".z0", f.Z0Hex), Z1: dScalar(t, where+".z1", f.Z1Hex),
+	}
+}
+
+// requireInvalid asserts err is a failed verification, not malformed input.
+func requireInvalid(t *testing.T, where string, err error) {
+	t.Helper()
+	if !errors.Is(err, proof.ErrInvalidProof) {
+		t.Fatalf("%s: wrong context should give ErrInvalidProof, got %v", where, err)
+	}
+}
+
+// TestVerifyVectors loads vectors.json, checks the deterministic values and
+// verifies every proof, and that each proof fails under Index+1.
+func TestVerifyVectors(t *testing.T) {
+	v := loadVectors(t)
+
+	for name, n := range map[string]int{
+		"scalar_base_mult": len(v.ScalarBaseMult), "elgamal_encrypt": len(v.ElGamalEncrypt),
+		"fiat_shamir": len(v.FiatShamir), "binary_proof": len(v.BinaryProof),
+		"sum_one_proof": len(v.SumOneProof), "candidate_sum_proof": len(v.CandidateSum),
+		"consistency_proof": len(v.Consistency),
+	} {
+		if n == 0 {
+			t.Fatalf("category %s is empty", name)
+		}
+	}
+
 	for i, sv := range v.ScalarBaseMult {
-		sb, _ := hex.DecodeString(sv.ScalarHex)
-		s, err := new(edwards25519.Scalar).SetCanonicalBytes(sb)
-		if err != nil {
-			t.Fatalf("scalar_base_mult[%d]: bad scalar: %v", i, err)
-		}
-		p := new(edwards25519.Point).ScalarBaseMult(s)
+		w := "scalar_base_mult[" + itoa(i) + "]"
+		s := dScalar(t, w, sv.ScalarHex)
+		p := ristretto255.NewIdentityElement().ScalarBaseMult(s)
 		if hexEncode(p.Bytes()) != sv.ExpectedPointHex {
-			t.Fatalf("scalar_base_mult[%d]: point mismatch", i)
+			t.Fatalf("%s: point mismatch", w)
 		}
 	}
 
-	// Verify ElGamal encryption vectors.
 	for i, ev := range v.ElGamalEncrypt {
-		pkb, _ := hex.DecodeString(ev.PublicKeyHex)
-		pk, err := new(edwards25519.Point).SetBytes(pkb)
+		w := "elgamal_encrypt[" + itoa(i) + "]"
+		pk := dElement(t, w+".pk", ev.PublicKeyHex)
+		r := dScalar(t, w+".r", ev.RandomnessHex)
+		ct, err := elgamal.EncryptWithRandomness(pk, ev.Message, r)
 		if err != nil {
-			t.Fatalf("elgamal_encrypt[%d]: bad public key: %v", i, err)
+			t.Fatalf("%s: %v", w, err)
 		}
-		rb, _ := hex.DecodeString(ev.RandomnessHex)
-		r, err := new(edwards25519.Scalar).SetCanonicalBytes(rb)
-		if err != nil {
-			t.Fatalf("elgamal_encrypt[%d]: bad randomness: %v", i, err)
-		}
-		ct := elgamal.EncryptWithRandomness(pk, ev.Message, r)
 		if hexEncode(ct.C1.Bytes()) != ev.ExpectedC1Hex || hexEncode(ct.C2.Bytes()) != ev.ExpectedC2Hex {
-			t.Fatalf("elgamal_encrypt[%d]: ciphertext mismatch", i)
+			t.Fatalf("%s: ciphertext mismatch", w)
 		}
 	}
 
-	// Verify Fiat-Shamir vectors.
 	for i, fv := range v.FiatShamir {
+		w := "fiat_shamir[" + itoa(i) + "]"
 		dataSlices := make([][]byte, len(fv.DataHex))
 		for j, dh := range fv.DataHex {
-			dataSlices[j], _ = hex.DecodeString(dh)
+			b, err := hex.DecodeString(dh)
+			if err != nil {
+				t.Fatalf("%s: bad hex: %v", w, err)
+			}
+			dataSlices[j] = b
 		}
 		result := internal.FiatShamir(fv.Domain, dataSlices...)
 		if hexEncode(result.Bytes()) != fv.ExpectedScalarHex {
-			t.Fatalf("fiat_shamir[%d]: scalar mismatch", i)
+			t.Fatalf("%s: scalar mismatch", w)
 		}
 	}
 
-	// Verify binary proof vectors (verify-only: check that the proof verifies).
 	for i, bv := range v.BinaryProof {
-		pkb, _ := hex.DecodeString(bv.PublicKeyHex)
-		pk, _ := new(edwards25519.Point).SetBytes(pkb)
-
-		c1b, _ := hex.DecodeString(bv.CiphertextC1)
-		c1, _ := new(edwards25519.Point).SetBytes(c1b)
-		c2b, _ := hex.DecodeString(bv.CiphertextC2)
-		c2, _ := new(edwards25519.Point).SetBytes(c2b)
-		ct := &elgamal.Ciphertext{C1: c1, C2: c2}
-
-		bp := decodeBinaryProof(t, bv.ExpectedProof)
-		if !proof.VerifyBinaryWithDomain(bv.Domain, pk, ct, bp) {
-			t.Fatalf("binary_proof[%d]: proof does not verify", i)
+		w := "binary_proof[" + itoa(i) + "]"
+		pk := dElement(t, w+".pk", bv.PublicKeyHex)
+		ct := dCiphertext(t, w, CiphertextFields{bv.CiphertextC1, bv.CiphertextC2})
+		bp := decodeBinaryProof(t, w+".proof", bv.Proof)
+		ctx := bv.Context.toContext()
+		if err := proof.VerifyBinary(ctx, pk, ct, bp); err != nil {
+			t.Fatalf("%s: does not verify: %v", w, err)
 		}
+		ctx.Index++
+		requireInvalid(t, w, proof.VerifyBinary(ctx, pk, ct, bp))
 	}
 
-	// Verify candidate sum proof vectors.
-	for i, csv := range v.CandidateSum {
-		pkb, _ := hex.DecodeString(csv.PublicKeyHex)
-		pk, _ := new(edwards25519.Point).SetBytes(pkb)
-
-		c1b, _ := hex.DecodeString(csv.AggC1Hex)
-		c1, _ := new(edwards25519.Point).SetBytes(c1b)
-		c2b, _ := hex.DecodeString(csv.AggC2Hex)
-		c2, _ := new(edwards25519.Point).SetBytes(c2b)
-		aggCt := &elgamal.Ciphertext{C1: c1, C2: c2}
-
-		csProof := decodeBinaryProof(t, csv.ExpectedProof)
-		if !proof.VerifyCandidateSum(pk, aggCt, csProof) {
-			t.Fatalf("candidate_sum_proof[%d]: proof does not verify", i)
+	for i, sv := range v.SumOneProof {
+		w := "sum_one_proof[" + itoa(i) + "]"
+		pk := dElement(t, w+".pk", sv.PublicKeyHex)
+		if len(sv.Ciphertexts) < 3 {
+			t.Fatalf("%s: want at least 3 ciphertexts, got %d", w, len(sv.Ciphertexts))
 		}
+		cts := make([]*elgamal.Ciphertext, len(sv.Ciphertexts))
+		for j, c := range sv.Ciphertexts {
+			cts[j] = dCiphertext(t, w+".ct["+itoa(j)+"]", c)
+		}
+		sp := &proof.SumOneProof{
+			A: dElement(t, w+".a", sv.Proof.AHex),
+			B: dElement(t, w+".b", sv.Proof.BHex),
+			Z: dScalar(t, w+".z", sv.Proof.ZHex),
+		}
+		ctx := sv.Context.toContext()
+		if err := proof.VerifySumOne(ctx, pk, cts, sp); err != nil {
+			t.Fatalf("%s: does not verify: %v", w, err)
+		}
+		ctx.Index++
+		requireInvalid(t, w, proof.VerifySumOne(ctx, pk, cts, sp))
 	}
 
-	// Verify consistency proof vectors.
+	for i, cv := range v.CandidateSum {
+		w := "candidate_sum_proof[" + itoa(i) + "]"
+		pk := dElement(t, w+".pk", cv.PublicKeyHex)
+		agg := dCiphertext(t, w, CiphertextFields{cv.AggC1Hex, cv.AggC2Hex})
+		cp := decodeBinaryProof(t, w+".proof", cv.Proof)
+		ctx := cv.Context.toContext()
+		if err := proof.VerifyCandidateSum(ctx, pk, agg, cp); err != nil {
+			t.Fatalf("%s: does not verify: %v", w, err)
+		}
+		ctx.Index++
+		requireInvalid(t, w, proof.VerifyCandidateSum(ctx, pk, agg, cp))
+	}
+
 	for i, cv := range v.Consistency {
-		pkb, _ := hex.DecodeString(cv.PublicKeyHex)
-		pk, _ := new(edwards25519.Point).SetBytes(pkb)
-
-		pc1b, _ := hex.DecodeString(cv.PartyCt[0])
-		pc1, _ := new(edwards25519.Point).SetBytes(pc1b)
-		pc2b, _ := hex.DecodeString(cv.PartyCt[1])
-		pc2, _ := new(edwards25519.Point).SetBytes(pc2b)
-		partyCt := &elgamal.Ciphertext{C1: pc1, C2: pc2}
-
-		cc1b, _ := hex.DecodeString(cv.CandSumCt[0])
-		cc1, _ := new(edwards25519.Point).SetBytes(cc1b)
-		cc2b, _ := hex.DecodeString(cv.CandSumCt[1])
-		cc2, _ := new(edwards25519.Point).SetBytes(cc2b)
-		candSumCt := &elgamal.Ciphertext{C1: cc1, C2: cc2}
-
-		conProof := decodeBinaryProof(t, cv.ExpectedProof)
-		if !proof.VerifyConsistency(pk, partyCt, candSumCt, conProof) {
-			t.Fatalf("consistency_proof[%d]: proof does not verify", i)
+		w := "consistency_proof[" + itoa(i) + "]"
+		pk := dElement(t, w+".pk", cv.PublicKeyHex)
+		partyCt := dCiphertext(t, w+".party", cv.PartyCiphertext)
+		candSumCt := dCiphertext(t, w+".cand_sum", cv.CandSumCiphertext)
+		cp := decodeBinaryProof(t, w+".proof", cv.Proof)
+		ctx := cv.Context.toContext()
+		if err := proof.VerifyConsistency(ctx, pk, partyCt, candSumCt, cp); err != nil {
+			t.Fatalf("%s: does not verify: %v", w, err)
 		}
+		ctx.Index++
+		requireInvalid(t, w, proof.VerifyConsistency(ctx, pk, partyCt, candSumCt, cp))
 	}
 }
 
-func decodeBinaryProof(t *testing.T, fields BinaryProofFields) *proof.BinaryProof {
-	t.Helper()
-	a0b, _ := hex.DecodeString(fields.A0Hex)
-	a0, _ := new(edwards25519.Point).SetBytes(a0b)
-	b0b, _ := hex.DecodeString(fields.B0Hex)
-	b0, _ := new(edwards25519.Point).SetBytes(b0b)
-	a1b, _ := hex.DecodeString(fields.A1Hex)
-	a1, _ := new(edwards25519.Point).SetBytes(a1b)
-	b1b, _ := hex.DecodeString(fields.B1Hex)
-	b1, _ := new(edwards25519.Point).SetBytes(b1b)
-	e0b, _ := hex.DecodeString(fields.E0Hex)
-	e0, _ := new(edwards25519.Scalar).SetCanonicalBytes(e0b)
-	e1b, _ := hex.DecodeString(fields.E1Hex)
-	e1, _ := new(edwards25519.Scalar).SetCanonicalBytes(e1b)
-	z0b, _ := hex.DecodeString(fields.Z0Hex)
-	z0, _ := new(edwards25519.Scalar).SetCanonicalBytes(z0b)
-	z1b, _ := hex.DecodeString(fields.Z1Hex)
-	z1, _ := new(edwards25519.Scalar).SetCanonicalBytes(z1b)
-	return &proof.BinaryProof{
-		A0: a0, B0: b0, A1: a1, B1: b1,
-		E0: e0, E1: e1, Z0: z0, Z1: z1,
-	}
-}
+func itoa(i int) string { return strconv.Itoa(i) }

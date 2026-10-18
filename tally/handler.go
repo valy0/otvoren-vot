@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
-	"filippo.io/edwards25519"
+	"github.com/valy0/otvoren-vot/crypto/group"
+	"github.com/valy0/otvoren-vot/crypto/threshold"
 	"github.com/valy0/otvoren-vot/tally/ceremony"
 )
 
@@ -79,15 +81,15 @@ type startResponse struct {
 }
 
 type statusResponse struct {
-	ID            string     `json:"id"`
-	Phase         string     `json:"phase"`
-	ElectionID    string     `json:"election_id"`
-	BallotCount   int        `json:"ballot_count"`
-	PartyCount    int        `json:"party_count"`
-	TrusteeCount  int        `json:"trustee_count"`
-	StartedAt     time.Time  `json:"started_at"`
-	DecryptedAt   *time.Time `json:"decrypted_at,omitempty"`
-	Results       []int      `json:"results,omitempty"`
+	ID           string     `json:"id"`
+	Phase        string     `json:"phase"`
+	ElectionID   string     `json:"election_id"`
+	BallotCount  int        `json:"ballot_count"`
+	PartyCount   int        `json:"party_count"`
+	TrusteeCount int        `json:"trustee_count"`
+	StartedAt    time.Time  `json:"started_at"`
+	DecryptedAt  *time.Time `json:"decrypted_at,omitempty"`
+	Results      []int      `json:"results,omitempty"`
 }
 
 type partialDecryptionRequest struct {
@@ -96,8 +98,18 @@ type partialDecryptionRequest struct {
 }
 
 type partialDecryptionElement struct {
-	PartyIndex int    `json:"party_index"`
-	Point      string `json:"point"` // 64 hex chars = 32 bytes
+	PartyIndex int           `json:"party_index"`
+	Point      string        `json:"point"` // D: 64 hex chars = 32-byte element
+	Proof      *partialProof `json:"proof"`
+}
+
+// partialProof is the Chaum-Pedersen proof of one partial decryption:
+// u and v are 32-byte elements and z a 32-byte canonical scalar, each as 64
+// hex chars.
+type partialProof struct {
+	U string `json:"u"`
+	V string `json:"v"`
+	Z string `json:"z"`
 }
 
 type partialDecryptionResponse struct {
@@ -260,7 +272,7 @@ func (h *CeremonyHandler) runTally(ctx context.Context, cs *CeremonyState) {
 	cs.SetTallyResult(tallyResult)
 	cs.SetEncryptedSums(tallyResult.EncryptedSums)
 	cs.PartyCount = tallyResult.NumParties
-	cs.Partials = make(map[int][]*ceremony.PartialDecryptionData)
+	cs.Partials = make(map[int][]*threshold.Partial)
 	cs.TrusteeOrder = nil
 	if err := cs.SetPhase(PhaseAwaitingTrustees); err != nil {
 		slog.Error("save state (awaiting_trustees)", "ceremony", cs.ID, "err", err)
@@ -351,8 +363,8 @@ func (h *CeremonyHandler) handlePartialDecryption(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Deserialize and validate each partial decryption point.
-	pds := make([]*ceremony.PartialDecryptionData, cs.PartyCount)
+	// Decode every partial: its party index, its point D and its proof.
+	pds := make([]*threshold.Partial, cs.PartyCount)
 	for _, p := range req.Partials {
 		if p.PartyIndex < 0 || p.PartyIndex >= cs.PartyCount {
 			writeError(w, http.StatusBadRequest, "invalid_party_index",
@@ -371,23 +383,55 @@ func (h *CeremonyHandler) handlePartialDecryption(w http.ResponseWriter, r *http
 				fmt.Sprintf("party %d: invalid hex: %v", p.PartyIndex, err))
 			return
 		}
-		if len(pointBytes) != 32 {
+		d, err := group.DecodeElement(pointBytes)
+		if errors.Is(err, group.ErrLength) {
 			writeError(w, http.StatusBadRequest, "invalid_point_length",
 				fmt.Sprintf("party %d: expected 32 bytes, got %d", p.PartyIndex, len(pointBytes)))
 			return
 		}
-
-		pt, err := new(edwards25519.Point).SetBytes(pointBytes)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_point",
 				fmt.Sprintf("party %d: invalid ristretto255 point: %v", p.PartyIndex, err))
 			return
 		}
 
-		pds[p.PartyIndex] = &ceremony.PartialDecryptionData{D: pt}
+		if p.Proof == nil {
+			writeError(w, http.StatusBadRequest, "invalid_proof_encoding",
+				fmt.Sprintf("party %d: proof is missing", p.PartyIndex))
+			return
+		}
+		pf, err := decodeProofHex(p.Proof.U, p.Proof.V, p.Proof.Z)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_proof_encoding",
+				fmt.Sprintf("party %d: %v", p.PartyIndex, err))
+			return
+		}
+
+		pds[p.PartyIndex] = &threshold.Partial{TrusteeIndex: req.TrusteeIndex, D: d, Proof: pf}
 	}
 
-	// TODO: verify Chaum-Pedersen proof for each partial against trustee key
+	// Verify every partial against the submitting trustee's key, under the
+	// slot context and ciphertext of the same encrypted-sums vector. Nothing
+	// is stored unless every slot verifies, so a rejected submission does not
+	// occupy the trustee's place and the trustee can resubmit.
+	contexts, err := h.slotContexts(cs)
+	if err != nil {
+		slog.Error("slot contexts unavailable", "ceremony", cs.ID, "err", err)
+		writeError(w, http.StatusServiceUnavailable, "tally_unavailable",
+			fmt.Sprintf("cannot verify partial decryptions: %v", err))
+		return
+	}
+	sums := cs.TallyResult().EncryptedSums
+	key := h.trusteeKeys.Keys[req.TrusteeIndex]
+	for slot, pd := range pds {
+		if err := threshold.VerifyPartial(contexts[slot], sums[slot], pd, key); err != nil {
+			slog.Warn("partial decryption rejected",
+				"ceremony", cs.ID, "trustee", req.TrusteeIndex, "party", slot, "err", err)
+			writeError(w, http.StatusUnprocessableEntity, "invalid_partial_proof",
+				fmt.Sprintf("party %d: partial decryption proof does not verify for trustee %d", slot, req.TrusteeIndex))
+			return
+		}
+	}
 
 	cs.Partials[req.TrusteeIndex] = pds
 	cs.TrusteeOrder = append(cs.TrusteeOrder, req.TrusteeIndex)
@@ -418,31 +462,63 @@ func (h *CeremonyHandler) handlePartialDecryption(w http.ResponseWriter, r *http
 	})
 }
 
-// decryptLocked performs threshold decryption. Caller must hold h.mu.
-func (h *CeremonyHandler) decryptLocked(cs *CeremonyState) error {
-	if cs.TallyResult() == nil {
-		return fmt.Errorf("tally result not available in memory")
+// slotContexts returns the transcript context of every tally slot, in slot
+// order. It is the one place the tally builds slot contexts: submission
+// verifies, and decryption combines, partial slot i against
+// cs.TallyResult().EncryptedSums[i] under context i, all taken from the same
+// encrypted-sums vector. ElectionID is cs.ElectionID; TallyDigest is the
+// digest of the whole EncryptedSums vector; SetCommitment and SealedHead
+// stay zero until the tally has them (the encrypted handoff and the board
+// seal; PR 11 fills them).
+//
+// It returns an error when the tally result is not in memory, which is the
+// case after a restart (H10, fixed in PR 11), and when the tally does not
+// match the ceremony's party count. Caller must hold h.mu.
+func (h *CeremonyHandler) slotContexts(cs *CeremonyState) ([]threshold.SlotContext, error) {
+	if cs.ElectionID == "" {
+		return nil, errors.New("ceremony has no election id")
 	}
-
-	// Reshape partials from CeremonyState format to DecryptTally format.
-	//
-	// CeremonyState.Partials:  map[trusteeIndex] -> []*PartialDecryptionData (per party)
-	// DecryptTally wants:      []map[partyIndex]*PartialDecryptionData (indexed by position)
-	//
-	// trusteeIndices[i] = trustee index of the i-th contributor.
-	trusteeIndices := cs.TrusteeOrder[:decryptionThreshold]
-	partials := make([]map[int]*ceremony.PartialDecryptionData, decryptionThreshold)
-
-	for i, tidx := range trusteeIndices {
-		pds := cs.Partials[tidx]
-		m := make(map[int]*ceremony.PartialDecryptionData, len(pds))
-		for j, pd := range pds {
-			m[j] = pd
+	tr := cs.TallyResult()
+	if tr == nil {
+		return nil, errors.New("tally result not available in memory")
+	}
+	if len(tr.EncryptedSums) != cs.PartyCount {
+		return nil, fmt.Errorf("tally has %d slots, ceremony has %d parties", len(tr.EncryptedSums), cs.PartyCount)
+	}
+	// TallyDigest requires decoded ciphertexts; ComputeTally builds every
+	// sum from ciphertexts decoded by elgamal.CiphertextFromBytes.
+	for slot, ct := range tr.EncryptedSums {
+		if ct == nil || ct.C1 == nil || ct.C2 == nil {
+			return nil, fmt.Errorf("tally slot %d is not a decoded ciphertext", slot)
 		}
-		partials[i] = m
 	}
 
-	results, err := ceremony.DecryptTally(cs.TallyResult(), partials, trusteeIndices)
+	digest := threshold.TallyDigest(tr.EncryptedSums)
+	contexts := make([]threshold.SlotContext, len(tr.EncryptedSums))
+	for slot := range contexts {
+		contexts[slot] = threshold.SlotContext{
+			ElectionID:  cs.ElectionID,
+			SlotIndex:   uint32(slot),
+			TallyDigest: digest,
+		}
+	}
+	return contexts, nil
+}
+
+// decryptLocked performs threshold decryption over the first
+// decryptionThreshold trustees to submit. threshold.Combine re-verifies every
+// partial it combines. Caller must hold h.mu.
+func (h *CeremonyHandler) decryptLocked(cs *CeremonyState) error {
+	contexts, err := h.slotContexts(cs)
+	if err != nil {
+		return fmt.Errorf("slot contexts: %w", err)
+	}
+	if len(cs.TrusteeOrder) < decryptionThreshold {
+		return fmt.Errorf("%d trustees submitted, threshold is %d", len(cs.TrusteeOrder), decryptionThreshold)
+	}
+
+	trustees := cs.TrusteeOrder[:decryptionThreshold]
+	results, err := ceremony.DecryptTally(cs.TallyResult(), contexts, cs.Partials, trustees, h.trusteeKeys.Keys, decryptionThreshold)
 	if err != nil {
 		return fmt.Errorf("decrypt tally: %w", err)
 	}

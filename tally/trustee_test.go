@@ -4,18 +4,21 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
+	"github.com/valy0/otvoren-vot/crypto/group"
 )
 
 func TestLoadTrusteeKeys(t *testing.T) {
 	// Generate test points: H_i = g * x_i for random scalars x_i
 	type testTrustee struct {
 		index int
-		point *edwards25519.Point
+		point *ristretto255.Element
 	}
 
 	trustees := make([]testTrustee, 3)
@@ -24,7 +27,7 @@ func TestLoadTrusteeKeys(t *testing.T) {
 		if err != nil {
 			t.Fatalf("generate scalar %d: %v", i, err)
 		}
-		point := new(edwards25519.Point).ScalarBaseMult(scalar)
+		point := ristretto255.NewIdentityElement().ScalarBaseMult(scalar)
 		trustees[i] = testTrustee{index: i + 1, point: point}
 	}
 
@@ -109,7 +112,7 @@ func TestLoadTrusteeKeysErrors(t *testing.T) {
 	})
 
 	t.Run("invalid point", func(t *testing.T) {
-		// 0x02 followed by 31 zero bytes is not a valid ed25519 point encoding.
+		// 0x02 followed by 31 zero bytes is not a valid ristretto255 encoding.
 		badBytes := make([]byte, 32)
 		badBytes[0] = 0x02
 		badHex := hex.EncodeToString(badBytes)
@@ -122,7 +125,7 @@ func TestLoadTrusteeKeysErrors(t *testing.T) {
 
 	t.Run("duplicate index", func(t *testing.T) {
 		scalar, _ := randomScalar()
-		pt := new(edwards25519.Point).ScalarBaseMult(scalar)
+		pt := ristretto255.NewIdentityElement().ScalarBaseMult(scalar)
 		keyHex := hex.EncodeToString(pt.Bytes())
 		path := writeTempJSON(t, []TrusteeKey{
 			{Index: 1, Key: keyHex},
@@ -136,7 +139,7 @@ func TestLoadTrusteeKeysErrors(t *testing.T) {
 
 	t.Run("zero index", func(t *testing.T) {
 		scalar, _ := randomScalar()
-		pt := new(edwards25519.Point).ScalarBaseMult(scalar)
+		pt := ristretto255.NewIdentityElement().ScalarBaseMult(scalar)
 		keyHex := hex.EncodeToString(pt.Bytes())
 		path := writeTempJSON(t, []TrusteeKey{{Index: 0, Key: keyHex}})
 		_, err := LoadTrusteeKeys(path)
@@ -146,13 +149,37 @@ func TestLoadTrusteeKeysErrors(t *testing.T) {
 	})
 }
 
-// randomScalar generates a cryptographically random edwards25519 scalar.
-func randomScalar() (*edwards25519.Scalar, error) {
+// TestLoadTrusteeKeysRejectsEdwardsAndIdentity: a key must decode as a
+// canonical, non-identity ristretto255 element. The Edwards basepoint's
+// encoding is not a canonical ristretto255 encoding, and the all-zero
+// encoding is the identity.
+func TestLoadTrusteeKeysRejectsEdwardsAndIdentity(t *testing.T) {
+	cases := []struct {
+		name string
+		key  string
+		want error
+	}{
+		{"edwards basepoint", "5866666666666666666666666666666666666666666666666666666666666666", group.ErrNonCanonical},
+		{"identity", strings.Repeat("0", 64), group.ErrIdentity},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeTempJSON(t, []TrusteeKey{{Index: 1, Key: c.key}})
+			ks, err := LoadTrusteeKeys(path)
+			if !errors.Is(err, c.want) {
+				t.Fatalf("LoadTrusteeKeys = (%v, %v), want an error wrapping %v", ks, err, c.want)
+			}
+		})
+	}
+}
+
+// randomScalar generates a cryptographically random ristretto255 scalar.
+func randomScalar() (*ristretto255.Scalar, error) {
 	var buf [64]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		return nil, err
 	}
-	s, err := new(edwards25519.Scalar).SetUniformBytes(buf[:])
+	s, err := ristretto255.NewScalar().SetUniformBytes(buf[:])
 	if err != nil {
 		return nil, err
 	}

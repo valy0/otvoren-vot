@@ -3,7 +3,7 @@ package proof
 import (
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/elgamal"
 	"github.com/valy0/otvoren-vot/crypto/internal"
 )
@@ -16,19 +16,20 @@ func TestProveCandidateSumZero(t *testing.T) {
 
 	// All zeros — voter did not select any candidate in this party.
 	cts := make([]*elgamal.Ciphertext, numCandidates)
-	rs := make([]*edwards25519.Scalar, numCandidates)
+	rs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		r := internal.RandomScalar()
-		cts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, 0, r)
+		cts[i] = mustEncrypt(t, kp.PublicKey, 0, r)
 		rs[i] = r
 	}
 	aggCt := elgamal.HomomorphicAdd(cts...)
 	rSum := internal.SumScalars(rs)
 
-	p := ProveCandidateSum(kp.PublicKey, aggCt, 0, rSum)
-	if !VerifyCandidateSum(kp.PublicKey, aggCt, p) {
-		t.Fatal("candidate sum=0 proof should verify")
+	p, err := ProveCandidateSum(testCtx(0), kp.PublicKey, aggCt, 0, rSum)
+	if err != nil {
+		t.Fatalf("ProveCandidateSum: %v", err)
 	}
+	requireValid(t, VerifyCandidateSum(testCtx(0), kp.PublicKey, aggCt, p), "candidate sum=0 proof should verify")
 }
 
 func TestProveCandidateSumOne(t *testing.T) {
@@ -37,23 +38,24 @@ func TestProveCandidateSumOne(t *testing.T) {
 	selected := 2
 
 	cts := make([]*elgamal.Ciphertext, numCandidates)
-	rs := make([]*edwards25519.Scalar, numCandidates)
+	rs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		m := 0
 		if i == selected {
 			m = 1
 		}
 		r := internal.RandomScalar()
-		cts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, m, r)
+		cts[i] = mustEncrypt(t, kp.PublicKey, m, r)
 		rs[i] = r
 	}
 	aggCt := elgamal.HomomorphicAdd(cts...)
 	rSum := internal.SumScalars(rs)
 
-	p := ProveCandidateSum(kp.PublicKey, aggCt, 1, rSum)
-	if !VerifyCandidateSum(kp.PublicKey, aggCt, p) {
-		t.Fatal("candidate sum=1 proof should verify")
+	p, err := ProveCandidateSum(testCtx(0), kp.PublicKey, aggCt, 1, rSum)
+	if err != nil {
+		t.Fatalf("ProveCandidateSum: %v", err)
 	}
+	requireValid(t, VerifyCandidateSum(testCtx(0), kp.PublicKey, aggCt, p), "candidate sum=1 proof should verify")
 }
 
 func TestVerifyCandidateSumRejectsTwo(t *testing.T) {
@@ -62,37 +64,40 @@ func TestVerifyCandidateSumRejectsTwo(t *testing.T) {
 
 	// Two candidates selected — sum is 2, which is invalid.
 	cts := make([]*elgamal.Ciphertext, numCandidates)
-	rs := make([]*edwards25519.Scalar, numCandidates)
+	rs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		m := 0
 		if i < 2 {
 			m = 1
 		}
 		r := internal.RandomScalar()
-		cts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, m, r)
+		cts[i] = mustEncrypt(t, kp.PublicKey, m, r)
 		rs[i] = r
 	}
 	aggCt := elgamal.HomomorphicAdd(cts...)
 	rSum := internal.SumScalars(rs)
 
 	// Prover tries to claim sum=1 but actual sum is 2 — proof should fail.
-	p := ProveCandidateSum(kp.PublicKey, aggCt, 1, rSum)
-	if VerifyCandidateSum(kp.PublicKey, aggCt, p) {
-		t.Fatal("candidate sum=2 claimed as 1 should NOT verify")
+	p, err := ProveCandidateSum(testCtx(0), kp.PublicKey, aggCt, 1, rSum)
+	if err != nil {
+		t.Fatalf("ProveCandidateSum: %v", err)
 	}
+	requireInvalid(t, VerifyCandidateSum(testCtx(0), kp.PublicKey, aggCt, p), "candidate sum=2 claimed as 1 should NOT verify")
 }
 
 func TestCandidateSumDomainSeparation(t *testing.T) {
 	// A candidate sum proof must not verify as a plain binary proof,
-	// because the domain separators differ.
+	// because the domain separators differ. The context is identical, so
+	// only the domain can make the difference.
 	kp := elgamal.GenerateKeyPair()
 	r := internal.RandomScalar()
-	ct := elgamal.EncryptWithRandomness(kp.PublicKey, 1, r)
+	ct := mustEncrypt(t, kp.PublicKey, 1, r)
 
-	candidateProof := ProveCandidateSum(kp.PublicKey, ct, 1, r)
-	if VerifyBinary(kp.PublicKey, ct, candidateProof) {
-		t.Fatal("candidate sum proof should NOT verify as binary proof (different domain)")
+	candidateProof, err := ProveCandidateSum(testCtx(0), kp.PublicKey, ct, 1, r)
+	if err != nil {
+		t.Fatalf("ProveCandidateSum: %v", err)
 	}
+	requireInvalid(t, VerifyBinary(testCtx(0), kp.PublicKey, ct, candidateProof), "candidate sum proof should NOT verify as binary proof (different domain)")
 }
 
 // --- Consistency Proofs ---
@@ -101,76 +106,79 @@ func TestProveConsistencyPartySelectedWithCandidate(t *testing.T) {
 	// party=1, candidate_sum=1 => diff=0
 	kp := elgamal.GenerateKeyPair()
 	rParty := internal.RandomScalar()
-	partyCt := elgamal.EncryptWithRandomness(kp.PublicKey, 1, rParty)
+	partyCt := mustEncrypt(t, kp.PublicKey, 1, rParty)
 
 	numCandidates := 3
 	candCts := make([]*elgamal.Ciphertext, numCandidates)
-	candRs := make([]*edwards25519.Scalar, numCandidates)
+	candRs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		m := 0
 		if i == 1 {
 			m = 1
 		}
 		r := internal.RandomScalar()
-		candCts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, m, r)
+		candCts[i] = mustEncrypt(t, kp.PublicKey, m, r)
 		candRs[i] = r
 	}
 	candSumCt := elgamal.HomomorphicAdd(candCts...)
 	rCandSum := internal.SumScalars(candRs)
 
-	rDiff := new(edwards25519.Scalar).Subtract(rParty, rCandSum)
-	p := ProveConsistency(kp.PublicKey, partyCt, candSumCt, 0, rDiff)
-	if !VerifyConsistency(kp.PublicKey, partyCt, candSumCt, p) {
-		t.Fatal("consistency proof (party=1, cand_sum=1, diff=0) should verify")
+	rDiff := ristretto255.NewScalar().Subtract(rParty, rCandSum)
+	p, err := ProveConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, 0, rDiff)
+	if err != nil {
+		t.Fatalf("ProveConsistency: %v", err)
 	}
+	requireValid(t, VerifyConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, p), "consistency proof (party=1, cand_sum=1, diff=0) should verify")
 }
 
 func TestProveConsistencyPartySelectedNoCandidate(t *testing.T) {
 	// party=1, candidate_sum=0 => diff=1
 	kp := elgamal.GenerateKeyPair()
 	rParty := internal.RandomScalar()
-	partyCt := elgamal.EncryptWithRandomness(kp.PublicKey, 1, rParty)
+	partyCt := mustEncrypt(t, kp.PublicKey, 1, rParty)
 
 	numCandidates := 3
 	candCts := make([]*elgamal.Ciphertext, numCandidates)
-	candRs := make([]*edwards25519.Scalar, numCandidates)
+	candRs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		r := internal.RandomScalar()
-		candCts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, 0, r)
+		candCts[i] = mustEncrypt(t, kp.PublicKey, 0, r)
 		candRs[i] = r
 	}
 	candSumCt := elgamal.HomomorphicAdd(candCts...)
 	rCandSum := internal.SumScalars(candRs)
 
-	rDiff := new(edwards25519.Scalar).Subtract(rParty, rCandSum)
-	p := ProveConsistency(kp.PublicKey, partyCt, candSumCt, 1, rDiff)
-	if !VerifyConsistency(kp.PublicKey, partyCt, candSumCt, p) {
-		t.Fatal("consistency proof (party=1, cand_sum=0, diff=1) should verify")
+	rDiff := ristretto255.NewScalar().Subtract(rParty, rCandSum)
+	p, err := ProveConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, 1, rDiff)
+	if err != nil {
+		t.Fatalf("ProveConsistency: %v", err)
 	}
+	requireValid(t, VerifyConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, p), "consistency proof (party=1, cand_sum=0, diff=1) should verify")
 }
 
 func TestProveConsistencyPartyNotSelectedNoCandidate(t *testing.T) {
 	// party=0, candidate_sum=0 => diff=0
 	kp := elgamal.GenerateKeyPair()
 	rParty := internal.RandomScalar()
-	partyCt := elgamal.EncryptWithRandomness(kp.PublicKey, 0, rParty)
+	partyCt := mustEncrypt(t, kp.PublicKey, 0, rParty)
 
 	numCandidates := 3
 	candCts := make([]*elgamal.Ciphertext, numCandidates)
-	candRs := make([]*edwards25519.Scalar, numCandidates)
+	candRs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		r := internal.RandomScalar()
-		candCts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, 0, r)
+		candCts[i] = mustEncrypt(t, kp.PublicKey, 0, r)
 		candRs[i] = r
 	}
 	candSumCt := elgamal.HomomorphicAdd(candCts...)
 	rCandSum := internal.SumScalars(candRs)
 
-	rDiff := new(edwards25519.Scalar).Subtract(rParty, rCandSum)
-	p := ProveConsistency(kp.PublicKey, partyCt, candSumCt, 0, rDiff)
-	if !VerifyConsistency(kp.PublicKey, partyCt, candSumCt, p) {
-		t.Fatal("consistency proof (party=0, cand_sum=0, diff=0) should verify")
+	rDiff := ristretto255.NewScalar().Subtract(rParty, rCandSum)
+	p, err := ProveConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, 0, rDiff)
+	if err != nil {
+		t.Fatalf("ProveConsistency: %v", err)
 	}
+	requireValid(t, VerifyConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, p), "consistency proof (party=0, cand_sum=0, diff=0) should verify")
 }
 
 func TestVerifyConsistencyRejectsPartyNotSelectedWithCandidate(t *testing.T) {
@@ -179,29 +187,30 @@ func TestVerifyConsistencyRejectsPartyNotSelectedWithCandidate(t *testing.T) {
 	// prove -1 is 0 or 1.
 	kp := elgamal.GenerateKeyPair()
 	rParty := internal.RandomScalar()
-	partyCt := elgamal.EncryptWithRandomness(kp.PublicKey, 0, rParty)
+	partyCt := mustEncrypt(t, kp.PublicKey, 0, rParty)
 
 	numCandidates := 3
 	candCts := make([]*elgamal.Ciphertext, numCandidates)
-	candRs := make([]*edwards25519.Scalar, numCandidates)
+	candRs := make([]*ristretto255.Scalar, numCandidates)
 	for i := range numCandidates {
 		m := 0
 		if i == 0 {
 			m = 1
 		}
 		r := internal.RandomScalar()
-		candCts[i] = elgamal.EncryptWithRandomness(kp.PublicKey, m, r)
+		candCts[i] = mustEncrypt(t, kp.PublicKey, m, r)
 		candRs[i] = r
 	}
 	candSumCt := elgamal.HomomorphicAdd(candCts...)
 	rCandSum := internal.SumScalars(candRs)
-	rDiff := new(edwards25519.Scalar).Subtract(rParty, rCandSum)
+	rDiff := ristretto255.NewScalar().Subtract(rParty, rCandSum)
 
 	// Prover tries to claim diff=0, but actual diff is -1 mod q.
-	p := ProveConsistency(kp.PublicKey, partyCt, candSumCt, 0, rDiff)
-	if VerifyConsistency(kp.PublicKey, partyCt, candSumCt, p) {
-		t.Fatal("consistency proof for party=0, cand_sum=1 should NOT verify")
+	p, err := ProveConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, 0, rDiff)
+	if err != nil {
+		t.Fatalf("ProveConsistency: %v", err)
 	}
+	requireInvalid(t, VerifyConsistency(testCtx(0), kp.PublicKey, partyCt, candSumCt, p), "consistency proof for party=0, cand_sum=1 should NOT verify")
 }
 
 // --- Full Ballot Proof Set ---
@@ -215,7 +224,10 @@ func TestFullBallotProofSet(t *testing.T) {
 	candidateChoice := 0
 
 	kp := elgamal.GenerateKeyPair()
-	ballot := elgamal.EncodeBallotWithCandidates(kp.PublicKey, numParties, numCandidates, partyChoice, candidateChoice)
+	ballot, err := elgamal.EncodeBallotWithCandidates(kp.PublicKey, numParties, numCandidates, partyChoice, candidateChoice)
+	if err != nil {
+		t.Fatalf("EncodeBallotWithCandidates: %v", err)
+	}
 
 	// --- Proof 1: Binary proofs for each party element ---
 	for i := range numParties {
@@ -223,18 +235,22 @@ func TestFullBallotProofSet(t *testing.T) {
 		if i == partyChoice {
 			m = 1
 		}
-		bp := ProveBinary(kp.PublicKey, ballot.PartyVector[i], m, ballot.PartyRandomness[i])
-		if !VerifyBinary(kp.PublicKey, ballot.PartyVector[i], bp) {
-			t.Fatalf("party binary proof %d should verify", i)
+		bp, err := ProveBinary(testCtx(uint32(i)), kp.PublicKey, ballot.PartyVector[i], m, ballot.PartyRandomness[i])
+		if err != nil {
+			t.Fatalf("party binary proof %d: %v", i, err)
+		}
+		if err := VerifyBinary(testCtx(uint32(i)), kp.PublicKey, ballot.PartyVector[i], bp); err != nil {
+			t.Fatalf("party binary proof %d should verify: %v", i, err)
 		}
 	}
 
 	// --- Proof 2: Party vector sums to 1 ---
 	partyRSum := internal.SumScalars(ballot.PartyRandomness)
-	sumProof := ProveSumOne(kp.PublicKey, ballot.PartyVector, partyRSum)
-	if !VerifySumOne(kp.PublicKey, ballot.PartyVector, sumProof) {
-		t.Fatal("party sum proof should verify")
+	sumProof, err := ProveSumOne(testCtx(0), kp.PublicKey, ballot.PartyVector, partyRSum)
+	if err != nil {
+		t.Fatalf("ProveSumOne: %v", err)
 	}
+	requireValid(t, VerifySumOne(testCtx(0), kp.PublicKey, ballot.PartyVector, sumProof), "party sum proof should verify")
 
 	// --- Proof 3: Binary proofs for each candidate element ---
 	for p := range numParties {
@@ -243,9 +259,13 @@ func TestFullBallotProofSet(t *testing.T) {
 			if p == partyChoice && c == candidateChoice {
 				m = 1
 			}
-			bp := ProveBinary(kp.PublicKey, ballot.CandidateVectors[p][c], m, ballot.CandRandomness[p][c])
-			if !VerifyBinary(kp.PublicKey, ballot.CandidateVectors[p][c], bp) {
-				t.Fatalf("candidate binary proof [%d][%d] should verify", p, c)
+			ctx := testCtx(candidateIndex(numParties, numCandidates, p, c))
+			bp, err := ProveBinary(ctx, kp.PublicKey, ballot.CandidateVectors[p][c], m, ballot.CandRandomness[p][c])
+			if err != nil {
+				t.Fatalf("candidate binary proof [%d][%d]: %v", p, c, err)
+			}
+			if err := VerifyBinary(ctx, kp.PublicKey, ballot.CandidateVectors[p][c], bp); err != nil {
+				t.Fatalf("candidate binary proof [%d][%d] should verify: %v", p, c, err)
 			}
 		}
 	}
@@ -262,9 +282,12 @@ func TestFullBallotProofSet(t *testing.T) {
 		rCandSum := internal.SumScalars(ballot.CandRandomness[p])
 
 		// Proof 4: Candidate sum ∈ {0, 1}
-		csProof := ProveCandidateSum(kp.PublicKey, aggCt, candSum, rCandSum)
-		if !VerifyCandidateSum(kp.PublicKey, aggCt, csProof) {
-			t.Fatalf("candidate sum proof for party %d should verify", p)
+		csProof, err := ProveCandidateSum(testCtx(uint32(p)), kp.PublicKey, aggCt, candSum, rCandSum)
+		if err != nil {
+			t.Fatalf("candidate sum proof for party %d: %v", p, err)
+		}
+		if err := VerifyCandidateSum(testCtx(uint32(p)), kp.PublicKey, aggCt, csProof); err != nil {
+			t.Fatalf("candidate sum proof for party %d should verify: %v", p, err)
 		}
 
 		// Proof 5: Consistency — diff = partyBit - candSum ∈ {0, 1}
@@ -274,10 +297,13 @@ func TestFullBallotProofSet(t *testing.T) {
 		}
 		diff := partyBit - candSum
 
-		rDiff := new(edwards25519.Scalar).Subtract(ballot.PartyRandomness[p], rCandSum)
-		conProof := ProveConsistency(kp.PublicKey, ballot.PartyVector[p], aggCt, diff, rDiff)
-		if !VerifyConsistency(kp.PublicKey, ballot.PartyVector[p], aggCt, conProof) {
-			t.Fatalf("consistency proof for party %d should verify", p)
+		rDiff := ristretto255.NewScalar().Subtract(ballot.PartyRandomness[p], rCandSum)
+		conProof, err := ProveConsistency(testCtx(uint32(p)), kp.PublicKey, ballot.PartyVector[p], aggCt, diff, rDiff)
+		if err != nil {
+			t.Fatalf("consistency proof for party %d: %v", p, err)
+		}
+		if err := VerifyConsistency(testCtx(uint32(p)), kp.PublicKey, ballot.PartyVector[p], aggCt, conProof); err != nil {
+			t.Fatalf("consistency proof for party %d should verify: %v", p, err)
 		}
 	}
 }
@@ -290,7 +316,10 @@ func TestFullBallotProofSetNoCandidate(t *testing.T) {
 	candidateChoice := -1 // no candidate
 
 	kp := elgamal.GenerateKeyPair()
-	ballot := elgamal.EncodeBallotWithCandidates(kp.PublicKey, numParties, numCandidates, partyChoice, candidateChoice)
+	ballot, err := elgamal.EncodeBallotWithCandidates(kp.PublicKey, numParties, numCandidates, partyChoice, candidateChoice)
+	if err != nil {
+		t.Fatalf("EncodeBallotWithCandidates: %v", err)
+	}
 
 	// Verify all 5 proof types.
 	for i := range numParties {
@@ -298,23 +327,31 @@ func TestFullBallotProofSetNoCandidate(t *testing.T) {
 		if i == partyChoice {
 			m = 1
 		}
-		bp := ProveBinary(kp.PublicKey, ballot.PartyVector[i], m, ballot.PartyRandomness[i])
-		if !VerifyBinary(kp.PublicKey, ballot.PartyVector[i], bp) {
-			t.Fatalf("party binary proof %d should verify", i)
+		bp, err := ProveBinary(testCtx(uint32(i)), kp.PublicKey, ballot.PartyVector[i], m, ballot.PartyRandomness[i])
+		if err != nil {
+			t.Fatalf("party binary proof %d: %v", i, err)
+		}
+		if err := VerifyBinary(testCtx(uint32(i)), kp.PublicKey, ballot.PartyVector[i], bp); err != nil {
+			t.Fatalf("party binary proof %d should verify: %v", i, err)
 		}
 	}
 
 	partyRSum := internal.SumScalars(ballot.PartyRandomness)
-	sumProof := ProveSumOne(kp.PublicKey, ballot.PartyVector, partyRSum)
-	if !VerifySumOne(kp.PublicKey, ballot.PartyVector, sumProof) {
-		t.Fatal("party sum proof should verify")
+	sumProof, err := ProveSumOne(testCtx(0), kp.PublicKey, ballot.PartyVector, partyRSum)
+	if err != nil {
+		t.Fatalf("ProveSumOne: %v", err)
 	}
+	requireValid(t, VerifySumOne(testCtx(0), kp.PublicKey, ballot.PartyVector, sumProof), "party sum proof should verify")
 
 	for p := range numParties {
 		for c := range numCandidates {
-			bp := ProveBinary(kp.PublicKey, ballot.CandidateVectors[p][c], 0, ballot.CandRandomness[p][c])
-			if !VerifyBinary(kp.PublicKey, ballot.CandidateVectors[p][c], bp) {
-				t.Fatalf("candidate binary proof [%d][%d] should verify", p, c)
+			ctx := testCtx(candidateIndex(numParties, numCandidates, p, c))
+			bp, err := ProveBinary(ctx, kp.PublicKey, ballot.CandidateVectors[p][c], 0, ballot.CandRandomness[p][c])
+			if err != nil {
+				t.Fatalf("candidate binary proof [%d][%d]: %v", p, c, err)
+			}
+			if err := VerifyBinary(ctx, kp.PublicKey, ballot.CandidateVectors[p][c], bp); err != nil {
+				t.Fatalf("candidate binary proof [%d][%d] should verify: %v", p, c, err)
 			}
 		}
 	}
@@ -324,9 +361,12 @@ func TestFullBallotProofSetNoCandidate(t *testing.T) {
 		rCandSum := internal.SumScalars(ballot.CandRandomness[p])
 
 		// All candidate sums are 0 (no preference anywhere).
-		csProof := ProveCandidateSum(kp.PublicKey, aggCt, 0, rCandSum)
-		if !VerifyCandidateSum(kp.PublicKey, aggCt, csProof) {
-			t.Fatalf("candidate sum proof for party %d should verify", p)
+		csProof, err := ProveCandidateSum(testCtx(uint32(p)), kp.PublicKey, aggCt, 0, rCandSum)
+		if err != nil {
+			t.Fatalf("candidate sum proof for party %d: %v", p, err)
+		}
+		if err := VerifyCandidateSum(testCtx(uint32(p)), kp.PublicKey, aggCt, csProof); err != nil {
+			t.Fatalf("candidate sum proof for party %d should verify: %v", p, err)
 		}
 
 		// diff = partyBit - 0
@@ -335,10 +375,13 @@ func TestFullBallotProofSetNoCandidate(t *testing.T) {
 			partyBit = 1
 		}
 
-		rDiff := new(edwards25519.Scalar).Subtract(ballot.PartyRandomness[p], rCandSum)
-		conProof := ProveConsistency(kp.PublicKey, ballot.PartyVector[p], aggCt, partyBit, rDiff)
-		if !VerifyConsistency(kp.PublicKey, ballot.PartyVector[p], aggCt, conProof) {
-			t.Fatalf("consistency proof for party %d should verify", p)
+		rDiff := ristretto255.NewScalar().Subtract(ballot.PartyRandomness[p], rCandSum)
+		conProof, err := ProveConsistency(testCtx(uint32(p)), kp.PublicKey, ballot.PartyVector[p], aggCt, partyBit, rDiff)
+		if err != nil {
+			t.Fatalf("consistency proof for party %d: %v", p, err)
+		}
+		if err := VerifyConsistency(testCtx(uint32(p)), kp.PublicKey, ballot.PartyVector[p], aggCt, conProof); err != nil {
+			t.Fatalf("consistency proof for party %d should verify: %v", p, err)
 		}
 	}
 }

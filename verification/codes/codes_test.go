@@ -3,14 +3,17 @@ package codes
 import (
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/threshold"
 )
 
 var testParties = []string{"ГЕРБ", "ПП-ДБ", "ДПС", "БСП"}
 
 func TestThresholdCodeGeneration(t *testing.T) {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	secret := dealer.Secret()
 
 	mapping := GenerateCodeMapping("session-1", testParties, secret)
@@ -30,7 +33,10 @@ func TestThresholdCodeGeneration(t *testing.T) {
 }
 
 func TestCodeDeterminism(t *testing.T) {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	secret := dealer.Secret()
 
 	m1 := GenerateCodeMapping("session-1", testParties, secret)
@@ -44,7 +50,10 @@ func TestCodeDeterminism(t *testing.T) {
 }
 
 func TestCodeVariation(t *testing.T) {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	secret := dealer.Secret()
 
 	m1 := GenerateCodeMapping("session-1", []string{"ГЕРБ"}, secret)
@@ -56,18 +65,27 @@ func TestCodeVariation(t *testing.T) {
 }
 
 func TestDifferentSubsetsSameResult(t *testing.T) {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Subset A: shares 1, 2, 3
-	secretA := threshold.LagrangeInterpolate(
-		[]*edwards25519.Scalar{dealer.Shares[0], dealer.Shares[1], dealer.Shares[2]},
+	secretA, err := threshold.LagrangeInterpolate(
+		[]*ristretto255.Scalar{dealer.Shares[0], dealer.Shares[1], dealer.Shares[2]},
 		[]int{1, 2, 3},
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Subset B: shares 2, 4, 5
-	secretB := threshold.LagrangeInterpolate(
-		[]*edwards25519.Scalar{dealer.Shares[1], dealer.Shares[3], dealer.Shares[4]},
+	secretB, err := threshold.LagrangeInterpolate(
+		[]*ristretto255.Scalar{dealer.Shares[1], dealer.Shares[3], dealer.Shares[4]},
 		[]int{2, 4, 5},
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	mA := GenerateCodeMapping("session-x", testParties, secretA)
 	mB := GenerateCodeMapping("session-x", testParties, secretB)
@@ -81,7 +99,10 @@ func TestDifferentSubsetsSameResult(t *testing.T) {
 }
 
 func TestReturnCodeDerivation(t *testing.T) {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
 	secret := dealer.Secret()
 
 	code := DeriveReturnCode(secret, "session-1", []byte("encrypted-ballot-data"))

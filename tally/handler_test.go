@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/elgamal"
+	"github.com/valy0/otvoren-vot/crypto/group"
 	"github.com/valy0/otvoren-vot/crypto/threshold"
 	"github.com/valy0/otvoren-vot/tally/ceremony"
 )
@@ -45,7 +47,10 @@ func newTestSetup(t *testing.T) *testSetup {
 
 	ballots := make([]ceremony.SerializedBallot, len(votes))
 	for i, party := range votes {
-		b := elgamal.EncodeBallot(dkg.ElectionPublicKey, numParties, party)
+		b, err := elgamal.EncodeBallot(dkg.ElectionPublicKey, numParties, party)
+		if err != nil {
+			t.Fatalf("EncodeBallot: %v", err)
+		}
 		pvHex := make([]string, numParties)
 		for j, ct := range b.PartyVector {
 			pvHex[j] = hex.EncodeToString(ct.Bytes())
@@ -58,7 +63,7 @@ func newTestSetup(t *testing.T) *testSetup {
 	}
 
 	// Build trustee key set from DKG participants.
-	keys := make(map[int]*edwards25519.Point, len(dkg.Participants))
+	keys := make(map[int]*ristretto255.Element, len(dkg.Participants))
 	for _, p := range dkg.Participants {
 		keys[p.ID] = p.VerificationKey
 	}
@@ -305,16 +310,7 @@ func TestPartialDecryptionAndDecrypt(t *testing.T) {
 	// Submit partials from trustees 1..5 (the first 5 out of 9).
 	trusteeIndices := []int{1, 2, 3, 4, 5}
 	for _, tidx := range trusteeIndices {
-		participant := ts.dkg.Participants[tidx-1]
-
-		partials := make([]partialDecryptionElement, ts.numParties)
-		for j, encSum := range tallyResult.EncryptedSums {
-			pd := threshold.PartialDecrypt(participant.CombinedShare, encSum)
-			partials[j] = partialDecryptionElement{
-				PartyIndex: j,
-				Point:      hex.EncodeToString(pd.D.Bytes()),
-			}
-		}
+		partials := trusteeElements(t, handler, ts, tidx)
 
 		body, _ := json.Marshal(partialDecryptionRequest{
 			TrusteeIndex: tidx,
@@ -377,20 +373,8 @@ func TestPartialDecryptionIdempotent(t *testing.T) {
 	ceremonyID := startCeremony(t, srv)
 	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
 
-	handler.mu.Lock()
-	tallyResult := handler.ceremony.TallyResult()
-	handler.mu.Unlock()
-
 	// Submit from trustee 1.
-	participant := ts.dkg.Participants[0] // trustee index 1
-	partials := make([]partialDecryptionElement, ts.numParties)
-	for j, encSum := range tallyResult.EncryptedSums {
-		pd := threshold.PartialDecrypt(participant.CombinedShare, encSum)
-		partials[j] = partialDecryptionElement{
-			PartyIndex: j,
-			Point:      hex.EncodeToString(pd.D.Bytes()),
-		}
-	}
+	partials := trusteeElements(t, handler, ts, 1)
 
 	body, _ := json.Marshal(partialDecryptionRequest{
 		TrusteeIndex: 1,
@@ -479,21 +463,9 @@ func TestResultsAfterDecryption(t *testing.T) {
 	ceremonyID := startCeremony(t, srv)
 	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
 
-	handler.mu.Lock()
-	tallyResult := handler.ceremony.TallyResult()
-	handler.mu.Unlock()
-
 	// Submit 5 partials to trigger auto-decryption.
 	for tidx := 1; tidx <= 5; tidx++ {
-		participant := ts.dkg.Participants[tidx-1]
-		partials := make([]partialDecryptionElement, ts.numParties)
-		for j, encSum := range tallyResult.EncryptedSums {
-			pd := threshold.PartialDecrypt(participant.CombinedShare, encSum)
-			partials[j] = partialDecryptionElement{
-				PartyIndex: j,
-				Point:      hex.EncodeToString(pd.D.Bytes()),
-			}
-		}
+		partials := trusteeElements(t, handler, ts, tidx)
 
 		body, _ := json.Marshal(partialDecryptionRequest{
 			TrusteeIndex: tidx,
@@ -561,21 +533,9 @@ func TestFinalize(t *testing.T) {
 	ceremonyID := startCeremony(t, srv)
 	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
 
-	handler.mu.Lock()
-	tallyResult := handler.ceremony.TallyResult()
-	handler.mu.Unlock()
-
 	// Submit 5 partials.
 	for tidx := 1; tidx <= 5; tidx++ {
-		participant := ts.dkg.Participants[tidx-1]
-		partials := make([]partialDecryptionElement, ts.numParties)
-		for j, encSum := range tallyResult.EncryptedSums {
-			pd := threshold.PartialDecrypt(participant.CombinedShare, encSum)
-			partials[j] = partialDecryptionElement{
-				PartyIndex: j,
-				Point:      hex.EncodeToString(pd.D.Bytes()),
-			}
-		}
+		partials := trusteeElements(t, handler, ts, tidx)
 
 		body, _ := json.Marshal(partialDecryptionRequest{
 			TrusteeIndex: tidx,
@@ -669,20 +629,13 @@ func newHandlerWithMockBBAndStateDir(t *testing.T, bbServer *httptest.Server, tr
 	return handler, mux
 }
 
-// submitPartials is a test helper that submits partial decryptions for the
-// given trustee indices and returns the number successfully accepted.
-func submitPartials(t *testing.T, srv *httptest.Server, ceremonyID string, ts *testSetup, tallyResult *ceremony.TallyResult, trusteeIndices []int) {
+// submitPartials is a test helper that submits valid partial decryptions,
+// with proofs bound to h's slot contexts, for the given trustee indices and
+// fails the test unless each one gets 200.
+func submitPartials(t *testing.T, srv *httptest.Server, h *CeremonyHandler, ceremonyID string, ts *testSetup, trusteeIndices []int) {
 	t.Helper()
 	for _, tidx := range trusteeIndices {
-		participant := ts.dkg.Participants[tidx-1]
-		partials := make([]partialDecryptionElement, ts.numParties)
-		for j, encSum := range tallyResult.EncryptedSums {
-			pd := threshold.PartialDecrypt(participant.CombinedShare, encSum)
-			partials[j] = partialDecryptionElement{
-				PartyIndex: j,
-				Point:      hex.EncodeToString(pd.D.Bytes()),
-			}
-		}
+		partials := trusteeElements(t, h, ts, tidx)
 
 		body, _ := json.Marshal(partialDecryptionRequest{
 			TrusteeIndex: tidx,
@@ -776,19 +729,26 @@ func TestCrashRecoveryPreservesPartials(t *testing.T) {
 	ceremonyID := startCeremony(t, srv1)
 	pollUntilPhase(t, srv1, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
 
-	handler1.mu.Lock()
-	tallyResult := handler1.ceremony.TallyResult()
-	handler1.mu.Unlock()
-
 	// Submit 2 partial decryptions (below threshold of 5).
-	submitPartials(t, srv1, ceremonyID, ts, tallyResult, []int{1, 2})
+	submitPartials(t, srv1, handler1, ceremonyID, ts, []int{1, 2})
 
-	// Verify partials are stored before crash.
+	// Verify partials are stored before crash, and keep what the recovered
+	// partials must match: the stored partials and the slot contexts and
+	// ciphertexts their proofs were verified under.
 	handler1.mu.Lock()
 	partialCountBefore := len(handler1.ceremony.Partials)
 	trusteeOrderBefore := make([]int, len(handler1.ceremony.TrusteeOrder))
 	copy(trusteeOrderBefore, handler1.ceremony.TrusteeOrder)
+	partialsBefore := make(map[int][]*threshold.Partial, len(handler1.ceremony.Partials))
+	for tidx, pds := range handler1.ceremony.Partials {
+		partialsBefore[tidx] = pds
+	}
+	contexts, err := handler1.slotContexts(handler1.ceremony)
+	sums := handler1.ceremony.TallyResult().EncryptedSums
 	handler1.mu.Unlock()
+	if err != nil {
+		t.Fatalf("slotContexts: %v", err)
+	}
 
 	if partialCountBefore != 2 {
 		t.Fatalf("expected 2 partials before crash, got %d", partialCountBefore)
@@ -822,7 +782,8 @@ func TestCrashRecoveryPreservesPartials(t *testing.T) {
 		}
 	}
 
-	// Verify the partial decryption points are actual non-nil edwards points.
+	// Verify the recovered partials are non-nil points with complete proofs,
+	// equal to what was stored, and still verify under the original tally.
 	for _, tidx := range trusteeOrderBefore {
 		pds, ok := cs.Partials[tidx]
 		if !ok {
@@ -835,6 +796,22 @@ func TestCrashRecoveryPreservesPartials(t *testing.T) {
 		for j, pd := range pds {
 			if pd == nil || pd.D == nil {
 				t.Errorf("trustee %d, party %d: partial decryption point is nil", tidx, j)
+				continue
+			}
+			if pd.Proof == nil || pd.Proof.U == nil || pd.Proof.V == nil || pd.Proof.Z == nil {
+				t.Errorf("trustee %d, party %d: recovered proof is incomplete", tidx, j)
+				continue
+			}
+			if pd.TrusteeIndex != tidx {
+				t.Errorf("trustee %d, party %d: recovered TrusteeIndex %d", tidx, j, pd.TrusteeIndex)
+			}
+			want := partialsBefore[tidx][j]
+			if pd.D.Equal(want.D) != 1 || pd.Proof.U.Equal(want.Proof.U) != 1 ||
+				pd.Proof.V.Equal(want.Proof.V) != 1 || pd.Proof.Z.Equal(want.Proof.Z) != 1 {
+				t.Errorf("trustee %d, party %d: recovered partial differs from the stored one", tidx, j)
+			}
+			if err := threshold.VerifyPartial(contexts[j], sums[j], pd, ts.trusteeKeys.Keys[tidx]); err != nil {
+				t.Errorf("trustee %d, party %d: recovered partial does not verify: %v", tidx, j, err)
 			}
 		}
 	}
@@ -858,9 +835,9 @@ func TestPartialDecryptionInvalidTrusteeIndex(t *testing.T) {
 	body, _ := json.Marshal(partialDecryptionRequest{
 		TrusteeIndex: 999,
 		Partials: []partialDecryptionElement{
-			{PartyIndex: 0, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
-			{PartyIndex: 1, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
-			{PartyIndex: 2, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
+			{PartyIndex: 0, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
+			{PartyIndex: 1, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
+			{PartyIndex: 2, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
 		},
 	})
 
@@ -905,7 +882,7 @@ func TestPartialDecryptionWrongPartyCount(t *testing.T) {
 	body, _ := json.Marshal(partialDecryptionRequest{
 		TrusteeIndex: 1,
 		Partials: []partialDecryptionElement{
-			{PartyIndex: 0, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
+			{PartyIndex: 0, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
 		},
 	})
 
@@ -947,7 +924,7 @@ func TestPartialDecryptionNonexistentCeremony(t *testing.T) {
 	body, _ := json.Marshal(partialDecryptionRequest{
 		TrusteeIndex: 1,
 		Partials: []partialDecryptionElement{
-			{PartyIndex: 0, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
+			{PartyIndex: 0, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
 		},
 	})
 
@@ -1050,9 +1027,9 @@ func TestPartialDecryptionBeforeCeremonyReachesAwaitingTrustees(t *testing.T) {
 	body, _ := json.Marshal(partialDecryptionRequest{
 		TrusteeIndex: 1,
 		Partials: []partialDecryptionElement{
-			{PartyIndex: 0, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
-			{PartyIndex: 1, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
-			{PartyIndex: 2, Point: hex.EncodeToString(edwards25519.NewIdentityPoint().Bytes())},
+			{PartyIndex: 0, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
+			{PartyIndex: 1, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
+			{PartyIndex: 2, Point: hex.EncodeToString(ristretto255.NewIdentityElement().Bytes())},
 		},
 	})
 
@@ -1178,6 +1155,17 @@ func TestConcurrentPartialDecryptions(t *testing.T) {
 		t.Fatal("tally result is nil after awaiting_trustees")
 	}
 
+	// Build every trustee's request first: the helpers may call t.Fatal,
+	// which must run on the test goroutine.
+	bodies := make([][]byte, 5)
+	for i := range bodies {
+		tidx := i + 1
+		bodies[i], _ = json.Marshal(partialDecryptionRequest{
+			TrusteeIndex: tidx,
+			Partials:     trusteeElements(t, handler, ts, tidx),
+		})
+	}
+
 	// Submit partials from 5 trustees concurrently.
 	var wg sync.WaitGroup
 	errs := make([]error, 5)
@@ -1187,27 +1175,10 @@ func TestConcurrentPartialDecryptions(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			tidx := idx + 1
-			participant := ts.dkg.Participants[tidx-1]
-
-			partials := make([]partialDecryptionElement, ts.numParties)
-			for j, encSum := range tallyResult.EncryptedSums {
-				pd := threshold.PartialDecrypt(participant.CombinedShare, encSum)
-				partials[j] = partialDecryptionElement{
-					PartyIndex: j,
-					Point:      hex.EncodeToString(pd.D.Bytes()),
-				}
-			}
-
-			body, _ := json.Marshal(partialDecryptionRequest{
-				TrusteeIndex: tidx,
-				Partials:     partials,
-			})
-
 			resp, err := http.Post(
 				srv.URL+"/api/v1/ceremony/"+ceremonyID+"/partial-decryption",
 				"application/json",
-				bytes.NewReader(body),
+				bytes.NewReader(bodies[idx]),
 			)
 			if err != nil {
 				errs[idx] = err
@@ -1253,4 +1224,383 @@ func TestConcurrentPartialDecryptions(t *testing.T) {
 			t.Errorf("party %d: expected %d votes, got %d", i, want, results[i])
 		}
 	}
+}
+
+// --- Partial-decryption proofs ---
+
+// trusteePartials returns trustee tidx's partial decryption of every tally
+// slot. Each proof is bound to the handler's own slot context
+// (h.slotContexts) and slot ciphertext (TallyResult().EncryptedSums[slot]),
+// exactly as the handler verifies it.
+func trusteePartials(t *testing.T, h *CeremonyHandler, ts *testSetup, tidx int) []*threshold.Partial {
+	t.Helper()
+	h.mu.Lock()
+	cs := h.ceremony
+	contexts, err := h.slotContexts(cs)
+	var sums []*elgamal.Ciphertext
+	if err == nil {
+		sums = cs.TallyResult().EncryptedSums
+	}
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatalf("slotContexts: %v", err)
+	}
+	return partialsUnder(t, contexts, sums, ts.dkg.Participants[tidx-1].CombinedShare, tidx)
+}
+
+// partialsUnder computes trustee tidx's partial decryption of sums[slot]
+// under contexts[slot], for every slot.
+func partialsUnder(t *testing.T, contexts []threshold.SlotContext, sums []*elgamal.Ciphertext, share *ristretto255.Scalar, tidx int) []*threshold.Partial {
+	t.Helper()
+	if len(contexts) != len(sums) {
+		t.Fatalf("%d contexts for %d slots", len(contexts), len(sums))
+	}
+	out := make([]*threshold.Partial, len(sums))
+	for slot, ct := range sums {
+		p, err := threshold.PartialDecrypt(contexts[slot], tidx, share, ct)
+		if err != nil {
+			t.Fatalf("trustee %d slot %d: PartialDecrypt: %v", tidx, slot, err)
+		}
+		out[slot] = p
+	}
+	return out
+}
+
+// contextsWithDigest builds n slot contexts the way the handler is specified
+// to: the election, the slot index and digest, and a zero set commitment and
+// sealed head. Tests use it to build contexts independently of slotContexts.
+func contextsWithDigest(electionID string, n int, digest [32]byte) []threshold.SlotContext {
+	out := make([]threshold.SlotContext, n)
+	for slot := range out {
+		out[slot] = threshold.SlotContext{
+			ElectionID:  electionID,
+			SlotIndex:   uint32(slot),
+			TallyDigest: digest,
+		}
+	}
+	return out
+}
+
+// wireElements encodes partials, in slot order, as a request's partials.
+func wireElements(partials []*threshold.Partial) []partialDecryptionElement {
+	out := make([]partialDecryptionElement, len(partials))
+	for slot, p := range partials {
+		out[slot] = partialDecryptionElement{
+			PartyIndex: slot,
+			Point:      hex.EncodeToString(p.D.Bytes()),
+			Proof: &partialProof{
+				U: hex.EncodeToString(p.Proof.U.Bytes()),
+				V: hex.EncodeToString(p.Proof.V.Bytes()),
+				Z: hex.EncodeToString(p.Proof.Z.Bytes()),
+			},
+		}
+	}
+	return out
+}
+
+// trusteeElements is trustee tidx's valid request partials.
+func trusteeElements(t *testing.T, h *CeremonyHandler, ts *testSetup, tidx int) []partialDecryptionElement {
+	t.Helper()
+	return wireElements(trusteePartials(t, h, ts, tidx))
+}
+
+// cloneElements deep-copies request partials so a test can tamper with one.
+func cloneElements(els []partialDecryptionElement) []partialDecryptionElement {
+	out := make([]partialDecryptionElement, len(els))
+	for i, el := range els {
+		out[i] = el
+		if el.Proof != nil {
+			p := *el.Proof
+			out[i].Proof = &p
+		}
+	}
+	return out
+}
+
+// plusOneHex returns the hex encoding of z+1 for a hex-encoded canonical
+// scalar z: still canonical, so it decodes, but it is a different scalar.
+func plusOneHex(t *testing.T, zHex string) string {
+	t.Helper()
+	zb, err := hex.DecodeString(zHex)
+	if err != nil {
+		t.Fatalf("decode z hex: %v", err)
+	}
+	z, err := group.DecodeScalar(zb)
+	if err != nil {
+		t.Fatalf("decode z: %v", err)
+	}
+	oneBytes := make([]byte, group.ScalarSize)
+	oneBytes[0] = 1
+	one, err := group.DecodeScalar(oneBytes)
+	if err != nil {
+		t.Fatalf("decode one: %v", err)
+	}
+	return hex.EncodeToString(ristretto255.NewScalar().Add(z, one).Bytes())
+}
+
+// postPartialBody posts a raw partial-decryption body and returns the status
+// code and the decoded JSON response.
+func postPartialBody(t *testing.T, srv *httptest.Server, ceremonyID string, body []byte) (int, map[string]any) {
+	t.Helper()
+	resp, err := http.Post(
+		srv.URL+"/api/v1/ceremony/"+ceremonyID+"/partial-decryption",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("partial-decryption request: %v", err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response (status %d): %v", resp.StatusCode, err)
+	}
+	return resp.StatusCode, out
+}
+
+// postPartial posts req and returns the status code and decoded response.
+func postPartial(t *testing.T, srv *httptest.Server, ceremonyID string, req partialDecryptionRequest) (int, map[string]any) {
+	t.Helper()
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	return postPartialBody(t, srv, ceremonyID, body)
+}
+
+// requireErrorCode fails unless the response has wantStatus and error code wantCode.
+func requireErrorCode(t *testing.T, status int, body map[string]any, wantStatus int, wantCode string) {
+	t.Helper()
+	if status != wantStatus {
+		t.Fatalf("status = %d, want %d (body %v)", status, wantStatus, body)
+	}
+	errObj, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %v", body)
+	}
+	if errObj["code"] != wantCode {
+		t.Fatalf("error code = %v, want %s (message %v)", errObj["code"], wantCode, errObj["message"])
+	}
+}
+
+// requireAccepted fails unless the response is 200 with status "accepted".
+func requireAccepted(t *testing.T, status int, body map[string]any) {
+	t.Helper()
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %v)", status, body)
+	}
+	if body["status"] != "accepted" {
+		t.Fatalf("response status = %v, want accepted", body["status"])
+	}
+}
+
+// requireNotStored fails if trustee tidx's partials are in memory or in the
+// trustee order, or reached the journal on disk.
+func requireNotStored(t *testing.T, h *CeremonyHandler, tidx int) {
+	t.Helper()
+	h.mu.Lock()
+	_, inMemory := h.ceremony.Partials[tidx]
+	order := slices.Clone(h.ceremony.TrusteeOrder)
+	h.mu.Unlock()
+	if inMemory {
+		t.Errorf("trustee %d: partials stored in memory", tidx)
+	}
+	if slices.Contains(order, tidx) {
+		t.Errorf("trustee %d: appended to the trustee order %v", tidx, order)
+	}
+
+	journal, err := LoadCeremonyState(h.stateDir)
+	if err != nil {
+		t.Fatalf("load journal: %v", err)
+	}
+	if journal == nil {
+		t.Fatal("no journal on disk")
+	}
+	if _, onDisk := journal.Partials[tidx]; onDisk {
+		t.Errorf("trustee %d: partials saved to the journal", tidx)
+	}
+	if slices.Contains(journal.TrusteeOrder, tidx) {
+		t.Errorf("trustee %d: in the journal's trustee order %v", tidx, journal.TrusteeOrder)
+	}
+}
+
+// TestPartialWithInvalidProofRejected: a submission with a proof that does not
+// verify against the submitting trustee's key gets 422 and occupies nothing,
+// so the trustee can resubmit.
+func TestPartialWithInvalidProofRejected(t *testing.T) {
+	ts := newTestSetup(t)
+	bb := mockBB(t, true, ts.ballots)
+	defer bb.Close()
+
+	handler, mux := newHandlerWithMockBB(t, bb, ts.trusteeKeys)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	ceremonyID := startCeremony(t, srv)
+	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
+
+	valid := trusteeElements(t, handler, ts, 1)
+
+	// z+1 on slot 1 only: the request decodes, but that slot's proof fails.
+	tampered := cloneElements(valid)
+	tampered[1].Proof.Z = plusOneHex(t, tampered[1].Proof.Z)
+	status, body := postPartial(t, srv, ceremonyID, partialDecryptionRequest{TrusteeIndex: 1, Partials: tampered})
+	requireErrorCode(t, status, body, http.StatusUnprocessableEntity, "invalid_partial_proof")
+	requireNotStored(t, handler, 1)
+
+	// Trustee 1's valid partials submitted as trustee 2: the proofs are bound
+	// to trustee 1's index and verify only against trustee 1's key.
+	status, body = postPartial(t, srv, ceremonyID, partialDecryptionRequest{TrusteeIndex: 2, Partials: valid})
+	requireErrorCode(t, status, body, http.StatusUnprocessableEntity, "invalid_partial_proof")
+	requireNotStored(t, handler, 2)
+
+	// The rejections occupied no slot: trustee 1 resubmits a valid proof.
+	status, body = postPartial(t, srv, ceremonyID, partialDecryptionRequest{TrusteeIndex: 1, Partials: valid})
+	requireAccepted(t, status, body)
+
+	handler.mu.Lock()
+	_, stored := handler.ceremony.Partials[1]
+	order := slices.Clone(handler.ceremony.TrusteeOrder)
+	handler.mu.Unlock()
+	if !stored {
+		t.Error("trustee 1: valid resubmission not stored")
+	}
+	if !slices.Equal(order, []int{1}) {
+		t.Errorf("trustee order = %v, want [1]", order)
+	}
+}
+
+// TestPartialForDifferentTallyRejected: partials whose proofs are bound to the
+// digest of a different tally vector get 422 and are not stored, even though
+// every D is correct for the handler's ciphertexts. The same partials bound to
+// the digest of the handler's own sums (built here, not by slotContexts) are
+// accepted.
+func TestPartialForDifferentTallyRejected(t *testing.T) {
+	ts := newTestSetup(t)
+	bb := mockBB(t, true, ts.ballots)
+	defer bb.Close()
+
+	handler, mux := newHandlerWithMockBB(t, bb, ts.trusteeKeys)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	ceremonyID := startCeremony(t, srv)
+	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
+
+	handler.mu.Lock()
+	sums := handler.ceremony.TallyResult().EncryptedSums
+	handler.mu.Unlock()
+
+	// The tally of a different ballot set: the first four ballots only.
+	other, err := ceremony.ComputeTally(ts.ballots[:4])
+	if err != nil {
+		t.Fatalf("ComputeTally(other): %v", err)
+	}
+	ownDigest := threshold.TallyDigest(sums)
+	otherDigest := threshold.TallyDigest(other.EncryptedSums)
+	if otherDigest == ownDigest {
+		t.Fatal("fixture: the two tally vectors have the same digest")
+	}
+
+	share := ts.dkg.Participants[0].CombinedShare
+	wrong := partialsUnder(t, contextsWithDigest("test-election", len(sums), otherDigest), sums, share, 1)
+	status, body := postPartial(t, srv, ceremonyID, partialDecryptionRequest{TrusteeIndex: 1, Partials: wireElements(wrong)})
+	requireErrorCode(t, status, body, http.StatusUnprocessableEntity, "invalid_partial_proof")
+	requireNotStored(t, handler, 1)
+
+	own := partialsUnder(t, contextsWithDigest("test-election", len(sums), ownDigest), sums, share, 1)
+	status, body = postPartial(t, srv, ceremonyID, partialDecryptionRequest{TrusteeIndex: 1, Partials: wireElements(own)})
+	requireAccepted(t, status, body)
+}
+
+// TestPartialWithoutProofRejected: a partial with no proof, or with a u, v or
+// z that does not decode, gets 400 invalid_proof_encoding and is not stored.
+func TestPartialWithoutProofRejected(t *testing.T) {
+	ts := newTestSetup(t)
+	bb := mockBB(t, true, ts.ballots)
+	defer bb.Close()
+
+	handler, mux := newHandlerWithMockBB(t, bb, ts.trusteeKeys)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	ceremonyID := startCeremony(t, srv)
+	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
+
+	valid := trusteeElements(t, handler, ts, 1)
+
+	t.Run("proof omitted", func(t *testing.T) {
+		raw, err := json.Marshal(partialDecryptionRequest{TrusteeIndex: 1, Partials: valid})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var req map[string]any
+		if err := json.Unmarshal(raw, &req); err != nil {
+			t.Fatal(err)
+		}
+		delete(req["partials"].([]any)[1].(map[string]any), "proof")
+		body, err := json.Marshal(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := bytes.Count(body, []byte(`"proof"`)); n != len(valid)-1 {
+			t.Fatalf("fixture: %d proofs left in the body, want %d: %s", n, len(valid)-1, body)
+		}
+		status, resp := postPartialBody(t, srv, ceremonyID, body)
+		requireErrorCode(t, status, resp, http.StatusBadRequest, "invalid_proof_encoding")
+		requireNotStored(t, handler, 1)
+	})
+
+	identity := strings.Repeat("00", 32)
+	edwardsBase := "58" + strings.Repeat("66", 31)
+	cases := []struct {
+		name   string
+		mutate func(p *partialProof) *partialProof
+	}{
+		{"proof null", func(*partialProof) *partialProof { return nil }},
+		{"u missing", func(p *partialProof) *partialProof { p.U = ""; return p }},
+		{"u not hex", func(p *partialProof) *partialProof { p.U = "zz" + p.U[2:]; return p }},
+		{"u identity", func(p *partialProof) *partialProof { p.U = identity; return p }},
+		{"v wrong length", func(p *partialProof) *partialProof { p.V = p.V[:62]; return p }},
+		{"v edwards basepoint", func(p *partialProof) *partialProof { p.V = edwardsBase; return p }},
+		{"z missing", func(p *partialProof) *partialProof { p.Z = ""; return p }},
+		{"z not canonical", func(p *partialProof) *partialProof { p.Z = strings.Repeat("ff", 32); return p }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			els := cloneElements(valid)
+			els[1].Proof = c.mutate(els[1].Proof)
+			status, resp := postPartial(t, srv, ceremonyID, partialDecryptionRequest{TrusteeIndex: 1, Partials: els})
+			requireErrorCode(t, status, resp, http.StatusBadRequest, "invalid_proof_encoding")
+			requireNotStored(t, handler, 1)
+		})
+	}
+}
+
+// TestPartialAfterRestartReturnsTallyUnavailable: after a restart the tally is
+// not in memory (H10, fixed in PR 11), so the handler cannot build slot
+// contexts. A submission gets 503 tally_unavailable and stores nothing.
+func TestPartialAfterRestartReturnsTallyUnavailable(t *testing.T) {
+	ts := newTestSetup(t)
+	bb := mockBB(t, true, ts.ballots)
+	defer bb.Close()
+
+	stateDir := t.TempDir()
+
+	handler1, mux1 := newHandlerWithMockBBAndStateDir(t, bb, ts.trusteeKeys, stateDir)
+	srv1 := httptest.NewServer(mux1)
+	defer srv1.Close()
+
+	ceremonyID := startCeremony(t, srv1)
+	pollUntilPhase(t, srv1, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
+	valid := trusteeElements(t, handler1, ts, 1)
+	srv1.Close()
+
+	handler2, mux2 := newHandlerWithMockBBAndStateDir(t, bb, ts.trusteeKeys, stateDir)
+	srv2 := httptest.NewServer(mux2)
+	defer srv2.Close()
+
+	status, body := postPartial(t, srv2, ceremonyID, partialDecryptionRequest{TrusteeIndex: 1, Partials: valid})
+	requireErrorCode(t, status, body, http.StatusServiceUnavailable, "tally_unavailable")
+	requireNotStored(t, handler2, 1)
 }

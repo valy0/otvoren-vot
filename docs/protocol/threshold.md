@@ -281,29 +281,35 @@ The prover (HSM) knows S_i and must prove that the same scalar relates (G, H_i) 
 ```
 STEP 1 — Commitment:
     Choose random k ∈ Z_q (generated inside HSM)
-    A = k · G
-    B = k · C₁
+    U = k · G
+    V = k · C₁
 
 STEP 2 — Challenge (Fiat-Shamir):
-    e = H_hash("otvoren-vot.partial-decryption-proof" || G || H_i || C₁ || D_i || A || B)
+    e = FiatShamir(partial-decryption transcript of fiat-shamir.md:
+        domain "otvoren-vot.chaum-pedersen", election_id, trustee_index,
+        slot_index, c2, tally_digest, set_commitment, sealed_head,
+        G, C₁, H_i, D_i, U, V)
+    (fiat-shamir.md writes the commitments as u = U, v = V; H_i and D_i
+    are the statement points that fiat-shamir.md calls A and B)
 
 STEP 3 — Response:
     z = k + e · S_i  (mod q)
 ```
 
-Proof: π_dec_i = (A, B, z)
+Proof: π_dec_i = (U, V, z)
 
 The HSM outputs (D_i, π_dec_i). The private share S_i was used inside the HSM for the computation but never appears in the output.
 
-**Verifier** (anyone, given G, H_i, C₁, D_i, and proof π_dec_i = (A, B, z)):
+**Verifier** (anyone, given G, H_i, C₁, D_i, proof π_dec_i = (U, V, z), and the transcript context election_id, trustee_index, slot_index, c2, tally_digest, set_commitment and sealed_head; see fiat-shamir.md for the full list):
 
 ```
 1. Recompute challenge:
-   e = H_hash("otvoren-vot.partial-decryption-proof" || G || H_i || C₁ || D_i || A || B)
+   e = FiatShamir(the same partial-decryption transcript, see fiat-shamir.md,
+       "Partial-Decryption Proof (Chaum-Pedersen)")
 
 2. Check:
-   z · G  = A + e · H_i
-   z · C₁ = B + e · D_i
+   z · G  = U + e · H_i
+   z · C₁ = V + e · D_i
 ```
 
 Both equations must hold. The first ensures z = k + e·S_i for some k, with S_i being the discrete log of H_i. The second ensures the same S_i was used to compute D_i from C₁.
@@ -312,7 +318,7 @@ Both equations must hold. The first ensures z = k + e·S_i for some k, with S_i 
 
 During the televised ceremony, each of the 5+ participating trustees performs the following for **every tally ciphertext** (encrypted sum for each party slot and each candidate slot):
 
-For each tally ciphertext (C₁^(j), C₂^(j)), j = 1, ..., M (where M is the number of tally slots):
+For each tally ciphertext (C₁^(j), C₂^(j)), j = 0, ..., M−1 (where M is the number of tally slots, in the canonical slot order of ballot-proofs.md section 8.4; j is the `slot_index` of the partial-decryption transcript):
 
 1. HSM receives C₁^(j) as input.
 2. HSM computes D_i^(j) = S_i · C₁^(j) and generates proof π_dec_i^(j).

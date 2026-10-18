@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
+	"github.com/valy0/otvoren-vot/crypto/group"
 	"github.com/valy0/otvoren-vot/crypto/threshold"
 	"github.com/valy0/otvoren-vot/verification/codes"
 	"github.com/valy0/otvoren-vot/verification/session"
@@ -16,7 +18,7 @@ type VerificationHandler struct {
 	sessions  *session.Store
 	parties   []string
 	threshold int
-	devSecret *edwards25519.Scalar // only set in dev mode
+	devSecret *ristretto255.Scalar // only set in dev mode
 }
 
 // HandleCreateSession handles POST /api/v1/session.
@@ -77,7 +79,7 @@ func (h *VerificationHandler) HandleSubmitShare(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	share, err := edwards25519.NewScalar().SetCanonicalBytes(shareBytes)
+	share, err := group.DecodeScalar(shareBytes)
 	if err != nil {
 		http.Error(w, "invalid scalar: not canonical", http.StatusBadRequest)
 		return
@@ -101,19 +103,24 @@ func (h *VerificationHandler) HandleSubmitShare(w http.ResponseWriter, r *http.R
 
 		// Only generate codes if we haven't already (threshold may have been met before)
 		if sess.Codes == nil {
-			shares := make([]*edwards25519.Scalar, 0, len(sess.Shares))
+			shares := make([]*ristretto255.Scalar, 0, len(sess.Shares))
 			indices := make([]int, 0, len(sess.Shares))
 			for idx, s := range sess.Shares {
 				shares = append(shares, s)
 				indices = append(indices, idx)
 			}
 
-			masterSecret := threshold.LagrangeInterpolate(shares, indices)
+			masterSecret, err := threshold.LagrangeInterpolate(shares, indices)
+			if err != nil {
+				slog.Error("reconstructing master secret", "error", err)
+				http.Error(w, "failed to reconstruct secret", http.StatusInternalServerError)
+				return
+			}
 			mapping := codes.GenerateCodeMapping(req.SessionID, h.parties, masterSecret)
 			h.sessions.SetCodes(req.SessionID, mapping.Codes, masterSecret)
 
 			// Zero individual shares now that we have the master secret
-			zero := edwards25519.NewScalar()
+			zero := ristretto255.NewScalar()
 			for _, s := range shares {
 				s.Set(zero)
 			}
@@ -177,4 +184,3 @@ func (h *VerificationHandler) HandleHealth(w http.ResponseWriter, r *http.Reques
 		"sessions": h.sessions.Count(),
 	})
 }
-

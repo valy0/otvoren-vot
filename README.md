@@ -124,7 +124,7 @@ otvoren-vot/
 
 | Component | Technology |
 |-----------|-----------|
-| Critical-path servers | Go + libsodium (CGo) |
+| Critical-path servers | Go (Ristretto255 via gtank/ristretto255) |
 | ZK proofs | gnark (Go) — Groth16 with recursion |
 | Bulletin board storage | PostgreSQL |
 | HSM interface | Go PKCS#11 |

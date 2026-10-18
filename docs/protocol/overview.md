@@ -44,7 +44,7 @@ This is approximately `2^252`, providing ~126 bits of security against discrete-
 - Canonical encoding — every point has exactly one valid byte representation, preventing subtle malleability bugs
 - Built on Curve25519, one of the most studied and optimized elliptic curves
 - Fast: constant-time scalar multiplication in ~120 microseconds on modern hardware
-- Excellent library support: `filippo.io/edwards25519` (Go), `libsodium` (C/WASM) both provide native Ristretto255 APIs
+- Excellent library support: `github.com/gtank/ristretto255` (Go), `libsodium` (C/WASM) both provide native Ristretto255 APIs
 
 **Used for:** ElGamal ballot encryption, homomorphic tallying, Chaum-Pedersen proofs, Sigma proofs of ballot validity.
 
@@ -223,7 +223,7 @@ The system's end-to-end verifiability and ballot secrecy rest on the following c
 
 ### 6.4 Random Oracle Model
 
-**Assumption:** The Fiat-Shamir heuristic (used to make Sigma protocols non-interactive) models the hash function as a random oracle. In practice, SHA-256 or BLAKE2b is used.
+**Assumption:** The Fiat-Shamir heuristic (used to make Sigma protocols non-interactive) models the hash function as a random oracle. In practice, SHA-512 is used (see fiat-shamir.md).
 
 **What depends on it:**
 - Non-interactive Sigma proof soundness — the challenge is derived from the transcript hash rather than from an interactive verifier
@@ -234,7 +234,7 @@ The system's end-to-end verifiability and ballot secrecy rest on the following c
 |-----------|-----------|-------------------|
 | ElGamal / Sigma proofs | DLog on Ristretto255 | ~126 bits |
 | Groth16 SNARK | KEA on BN254 | ~100-110 bits |
-| Fiat-Shamir | Random oracle (SHA-256) | 128 bits (collision resistance) |
+| Fiat-Shamir | Random oracle (SHA-512, reduced mod q) | ~126 bits (challenge space ~2^252; overall soundness capped by the group bound) |
 | Threshold scheme | DLog + honest majority (5 of 9 trustees) | Information-theoretic for secrecy; computational for verifiability |
 
 The weakest link is BN254 at ~100-110 bits. This is sufficient for election-duration security (the proofs need to withstand attack only until results are certified and publicly verified, typically days to weeks). Future versions may migrate to BLS12-381 (~120 bits) when gnark support matures, at the cost of larger field elements and slower proving.

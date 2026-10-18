@@ -1,12 +1,16 @@
 package elgamal
 
 import (
+	"errors"
 	"testing"
 )
 
 func TestEncodeBallotPartyOnly(t *testing.T) {
 	kp := GenerateKeyPair()
-	b := EncodeBallot(kp.PublicKey, 5, 3)
+	b, err := EncodeBallot(kp.PublicKey, 5, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(b.PartyVector) != 5 {
 		t.Fatalf("expected 5 party ciphertexts, got %d", len(b.PartyVector))
 	}
@@ -26,7 +30,10 @@ func TestEncodeBallotPartyOnly(t *testing.T) {
 
 func TestEncodeBallotWithCandidates(t *testing.T) {
 	kp := GenerateKeyPair()
-	b := EncodeBallotWithCandidates(kp.PublicKey, 3, 4, 1, 2)
+	b, err := EncodeBallotWithCandidates(kp.PublicKey, 3, 4, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, ct := range b.CandidateVectors[1] {
 		m := Decrypt(kp.PrivateKey, ct)
 		if i == 2 && m != 1 {
@@ -47,14 +54,20 @@ func TestEncodeBallotWithCandidates(t *testing.T) {
 
 func TestEncodeBallotRandomnessUsable(t *testing.T) {
 	kp := GenerateKeyPair()
-	b := EncodeBallot(kp.PublicKey, 3, 1)
+	b, err := EncodeBallot(kp.PublicKey, 3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Verify randomness matches: re-encrypt with stored r should give same ciphertext
 	for i := range 3 {
 		m := 0
 		if i == 1 {
 			m = 1
 		}
-		ct2 := EncryptWithRandomness(kp.PublicKey, m, b.PartyRandomness[i])
+		ct2, err := EncryptWithRandomness(kp.PublicKey, m, b.PartyRandomness[i])
+		if err != nil {
+			t.Fatal(err)
+		}
 		if ct2.C1.Equal(b.PartyVector[i].C1) != 1 || ct2.C2.Equal(b.PartyVector[i].C2) != 1 {
 			t.Fatalf("party %d: randomness should reproduce same ciphertext", i)
 		}
@@ -67,9 +80,16 @@ func TestHomomorphicBallotTally(t *testing.T) {
 	votes := []int{0, 0, 0, 0, 1, 1, 1, 2, 2, 2}
 	ballots := make([]*Ballot, len(votes))
 	for i, party := range votes {
-		ballots[i] = EncodeBallot(kp.PublicKey, numParties, party)
+		var err error
+		ballots[i], err = EncodeBallot(kp.PublicKey, numParties, party)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	tally := TallyBallots(ballots)
+	tally, err := TallyBallots(ballots)
+	if err != nil {
+		t.Fatal(err)
+	}
 	expected := []int{4, 3, 3}
 	for i, ct := range tally.PartyVector {
 		m := Decrypt(kp.PrivateKey, ct)
@@ -80,8 +100,8 @@ func TestHomomorphicBallotTally(t *testing.T) {
 }
 
 func TestTallyBallotsEmpty(t *testing.T) {
-	result := TallyBallots(nil)
-	if result != nil {
-		t.Fatal("TallyBallots(nil) should return nil")
+	result, err := TallyBallots(nil)
+	if result != nil || !errors.Is(err, ErrNoBallots) {
+		t.Fatal("TallyBallots(nil) should return nil and ErrNoBallots")
 	}
 }
