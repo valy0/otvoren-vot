@@ -3,7 +3,7 @@ package internal
 import (
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 )
 
 func TestRandomScalar(t *testing.T) {
@@ -41,8 +41,8 @@ func TestFiatShamir(t *testing.T) {
 func TestSumScalars(t *testing.T) {
 	s1 := RandomScalar()
 	s2 := RandomScalar()
-	sum := SumScalars([]*edwards25519.Scalar{s1, s2})
-	expected := new(edwards25519.Scalar).Add(s1, s2)
+	sum := SumScalars([]*ristretto255.Scalar{s1, s2})
+	expected := ristretto255.NewScalar().Add(s1, s2)
 	if sum.Equal(expected) != 1 {
 		t.Fatal("SumScalars should equal manual addition")
 	}
