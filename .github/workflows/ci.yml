@@ -29,7 +29,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
+      - run: npx tsc -b
       - run: npx eslint .
       - run: npx vitest run
 
@@ -50,6 +50,36 @@ jobs:
           - machine
           - pkg/jwtauth
           - pkg/middleware
+        include:
+          # The three board test packages share tables and race in parallel.
+          - module: bulletin-board
+            test_flags: -p 1
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
+      TEST_REDIS_URL: localhost:6379
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: actions/setup-go@v5.4.0
@@ -58,7 +88,7 @@ jobs:
           cache-dependency-path: ${{ matrix.module }}/go.sum
       - name: Test
         working-directory: ${{ matrix.module }}
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 ${{ matrix.test_flags }} ./...
       - name: Vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
