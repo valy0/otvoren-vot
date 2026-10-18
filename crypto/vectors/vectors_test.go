@@ -160,7 +160,7 @@ func binaryProofFields(p *proof.BinaryProof) BinaryProofFields {
 	}
 }
 
-var update = flag.Bool("update", false, "rewrite testdata/vectors.json from the Go implementation")
+var update = flag.Bool("update", false, "rewrite testdata/vectors.json and testdata/merkle.json from the Go implementation")
 
 // TestGenerateVectors produces test vectors and writes them to testdata/vectors.json.
 // Run: go test ./vectors/ -run TestGenerateVectors -update -v
