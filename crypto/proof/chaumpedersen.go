@@ -50,9 +50,11 @@ func ProveChaumPedersen(context [][]byte, g, h, A, B *ristretto255.Element, x *r
 // hold, and an error wrapping ErrMalformed for a nil statement element or
 // proof field.
 //
-// Inputs that come from the wire must be decoded with crypto/group (or
-// elgamal.CiphertextFromBytes) first; these verifiers do not reject identity
-// elements, because derived aggregates may legitimately be the identity.
+// VerifyChaumPedersen rejects only nil elements, never the identity. In a
+// partial decryption, h is the tally's c1 and B = share·c1, both of which are
+// the identity when the tally's randomness sums to 0. Elements that come from
+// the wire must be decoded with crypto/group first wherever the identity is
+// not a legitimate value.
 func VerifyChaumPedersen(context [][]byte, g, h, A, B *ristretto255.Element, p *ChaumPedersenProof) error {
 	if err := checkCPStatement(g, h, A, B); err != nil {
 		return err

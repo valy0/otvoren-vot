@@ -24,9 +24,11 @@ func ProveCandidateSum(ctx Context, publicKey *ristretto255.Element, aggCt *elga
 // VerifyCandidateSum verifies under ctx that a party's candidate vector sums
 // to 0 or 1. Errors are as for VerifyBinary.
 //
-// Inputs that come from the wire must be decoded with crypto/group (or
-// elgamal.CiphertextFromBytes) first; these verifiers do not reject identity
-// elements, because derived aggregates may legitimately be the identity.
+// aggCt is a homomorphic sum, not a wire field: either half may legitimately
+// be the identity, and it is accepted. The public key (an identity key is
+// refused with ErrMalformed), the proof fields and the ciphertexts aggCt is
+// summed from come from the wire and must be decoded with crypto/group (or
+// elgamal.CiphertextFromBytes) first.
 func VerifyCandidateSum(ctx Context, publicKey *ristretto255.Element, aggCt *elgamal.Ciphertext, p *BinaryProof) error {
 	return verifyBinaryWithDomain(candidateSumDomain, ctx, publicKey, aggCt, p)
 }
@@ -63,9 +65,11 @@ func ProveConsistency(ctx Context, publicKey *ristretto255.Element, partyCt, can
 // sum ciphertexts, then verifies the binary proof on the difference. Errors
 // are as for VerifyBinary.
 //
-// Inputs that come from the wire must be decoded with crypto/group (or
-// elgamal.CiphertextFromBytes) first; these verifiers do not reject identity
-// elements, because derived aggregates may legitimately be the identity.
+// candSumCt is a homomorphic sum, and the difference partyCt - candSumCt is
+// derived: either may legitimately be the identity, and both are accepted.
+// partyCt, the public key (an identity key is refused with ErrMalformed) and
+// the proof fields come from the wire and must be decoded with crypto/group
+// (or elgamal.CiphertextFromBytes) first.
 func VerifyConsistency(ctx Context, publicKey *ristretto255.Element, partyCt, candSumCt *elgamal.Ciphertext, p *BinaryProof) error {
 	if err := checkConsistencyStatement(ctx, publicKey, partyCt, candSumCt); err != nil {
 		return err

@@ -28,8 +28,11 @@ func ProveBinary(ctx Context, publicKey *ristretto255.Element, ct *elgamal.Ciphe
 // an error wrapping ErrMalformed for unusable input.
 //
 // Inputs that come from the wire must be decoded with crypto/group (or
-// elgamal.CiphertextFromBytes) first; these verifiers do not reject identity
-// elements, because derived aggregates may legitimately be the identity.
+// elgamal.CiphertextFromBytes) first. VerifyBinary refuses an identity public
+// key (ErrMalformed), but it does not reject an identity ciphertext component
+// or proof element: it shares its input checks with VerifyCandidateSum and
+// VerifyConsistency, whose statements are derived aggregates that may
+// legitimately be the identity.
 func VerifyBinary(ctx Context, publicKey *ristretto255.Element, ct *elgamal.Ciphertext, p *BinaryProof) error {
 	return verifyBinaryWithDomain(binaryDomain, ctx, publicKey, ct, p)
 }
