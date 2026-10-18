@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/valy0/otvoren-vot/bulletin-board/board"
 	"github.com/valy0/otvoren-vot/bulletin-board/internal/testdb"
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
+	"github.com/valy0/otvoren-vot/crypto/merkle"
 )
 
 const testAPIKey = "test-key"
@@ -375,9 +377,39 @@ func TestGetBallot_WithMerkleProof(t *testing.T) {
 		t.Fatalf("expected ballot_id 'proof-ballot', got %v", data["ballot_id"])
 	}
 
-	// Verify merkle_proof field exists
-	if _, exists := data["merkle_proof"]; !exists {
-		t.Fatal("response should include merkle_proof field")
+	// Verify the inclusion proof against the leaf built from the bytes
+	// submitBallot sent. The response's encrypted_ballot/zk_proofs come back
+	// re-serialised by JSONB and may differ byte-wise (H13, fixed in PR 7), so
+	// the leaf is not rebuilt from the response.
+	rawProof, ok := data["merkle_proof"].([]interface{})
+	if !ok {
+		t.Fatalf("merkle_proof should be an array, got %T", data["merkle_proof"])
+	}
+	proof := make([]merkle.Hash, len(rawProof))
+	for i, p := range rawProof {
+		hs, _ := p.(string)
+		raw, err := hex.DecodeString(hs)
+		if err != nil || len(raw) != merkle.HashSize {
+			t.Fatalf("merkle_proof[%d] is not a %d-byte hex hash: %v", i, merkle.HashSize, p)
+		}
+		copy(proof[i][:], raw)
+	}
+	treeSize, ok := data["tree_size"].(float64)
+	if !ok || treeSize != 1 {
+		t.Fatalf("tree_size = %v, want 1", data["tree_size"])
+	}
+	rootHex, _ := data["root_sha256"].(string)
+	rootRaw, err := hex.DecodeString(rootHex)
+	if err != nil || len(rootRaw) != merkle.HashSize {
+		t.Fatalf("root_sha256 is not a hex hash: %q", rootHex)
+	}
+	var root merkle.Hash
+	copy(root[:], rootRaw)
+	leaf := board.EncodeLeaf("proof-ballot",
+		json.RawMessage(`{"v":[1,0]}`), json.RawMessage(`{"p":[]}`))
+	position, _ := data["position"].(float64)
+	if err := merkle.VerifyInclusion(merkle.LeafHash(leaf), uint64(position)-1, uint64(treeSize), proof, root); err != nil {
+		t.Fatalf("inclusion proof should verify: %v", err)
 	}
 
 	// Verify encrypted_ballot field exists

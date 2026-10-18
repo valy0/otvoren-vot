@@ -2,12 +2,12 @@ package api
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 
 	"github.com/valy0/otvoren-vot/bulletin-board/board"
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
-	"github.com/valy0/otvoren-vot/crypto/merkle"
 )
 
 func handleListBallots(b *board.Board) http.HandlerFunc {
@@ -60,7 +60,7 @@ func handleGetBallot(b *board.Board) http.HandlerFunc {
 			return
 		}
 
-		rec, proof, err := b.GetBallot(r.Context(), ballotID)
+		rec, inc, err := b.GetBallot(r.Context(), ballotID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal", "Failed to get ballot")
 			return
@@ -72,11 +72,23 @@ func handleGetBallot(b *board.Board) http.HandlerFunc {
 
 		type ballotResponse struct {
 			*store.BallotRecord
-			MerkleProof []merkle.ProofNode `json:"merkle_proof"`
+			MerkleProof []string `json:"merkle_proof"`
+			TreeSize    uint64   `json:"tree_size"`
+			RootSHA256  string   `json:"root_sha256"`
+		}
+
+		proof := make([]string, len(inc.Proof))
+		for i, h := range inc.Proof {
+			proof[i] = hex.EncodeToString(h[:])
 		}
 
 		writeJSON(w, http.StatusOK, Response{
-			Data: ballotResponse{BallotRecord: rec, MerkleProof: proof},
+			Data: ballotResponse{
+				BallotRecord: rec,
+				MerkleProof:  proof,
+				TreeSize:     inc.TreeSize,
+				RootSHA256:   hex.EncodeToString(inc.Root[:]),
+			},
 		})
 	}
 }

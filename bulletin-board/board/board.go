@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	ErrBoardSealed     = errors.New("board is sealed")
-	ErrDuplicateBallot = errors.New("ballot ID already exists")
+	ErrBoardSealed      = errors.New("board is sealed")
+	ErrDuplicateBallot  = errors.New("ballot ID already exists")
 	ErrPositionConflict = errors.New("position conflict")
 )
 
@@ -122,13 +122,24 @@ func (b *Board) AppendBallot(ctx context.Context, ballotID string, encryptedBall
 
 	// Tree update only after DB confirms the insert.
 	b.tree.Append(leafData)
-	root := hex.EncodeToString(b.tree.Root())
+	rootHash := b.tree.Root()
+	root := hex.EncodeToString(rootHash[:])
 
 	return &AppendResult{Position: position, MerkleRoot: root}, nil
 }
 
-// GetBallot retrieves a ballot and its Merkle inclusion proof.
-func (b *Board) GetBallot(ctx context.Context, ballotID string) (*store.BallotRecord, []merkle.ProofNode, error) {
+// Inclusion is a Merkle inclusion proof together with the tree size and root
+// it was computed against. The three are taken under one lock, so they always
+// match each other.
+type Inclusion struct {
+	Proof    []merkle.Hash
+	TreeSize uint64
+	Root     merkle.Hash
+}
+
+// GetBallot retrieves a ballot and its Merkle inclusion proof against the
+// current tree.
+func (b *Board) GetBallot(ctx context.Context, ballotID string) (*store.BallotRecord, *Inclusion, error) {
 	rec, err := b.store.GetBallot(ctx, ballotID)
 	if err != nil {
 		return nil, nil, err
@@ -137,30 +148,37 @@ func (b *Board) GetBallot(ctx context.Context, ballotID string) (*store.BallotRe
 		return nil, nil, nil
 	}
 
-	proof, err := b.tree.InclusionProof(int(rec.Position - 1)) // 0-based index
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	size := b.tree.Size()
+	if rec.Position < 1 || uint64(rec.Position-1) >= size {
+		return nil, nil, fmt.Errorf("ballot %q at position %d is not in the tree (size %d)", ballotID, rec.Position, size)
+	}
+	proof, err := b.tree.InclusionProof(uint64(rec.Position-1), size)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return rec, proof, nil
+	return rec, &Inclusion{Proof: proof, TreeSize: size, Root: b.tree.Root()}, nil
 }
 
 // Root returns the current Merkle root as hex string.
 func (b *Board) Root() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	r := b.tree.Root()
-	if r == nil {
+	if b.tree.Size() == 0 {
 		return ""
 	}
-	return hex.EncodeToString(r)
+	r := b.tree.Root()
+	return hex.EncodeToString(r[:])
 }
 
 // Size returns the number of ballots.
 func (b *Board) Size() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.tree.Size()
+	return int(b.tree.Size())
 }
 
 // Seal marks the board as read-only. No more ballots can be appended.
@@ -180,16 +198,6 @@ func (b *Board) IsSealed() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.sealed
-}
-
-// InclusionProof returns the Merkle proof for a given position (1-based).
-func (b *Board) InclusionProof(position int64) ([]merkle.ProofNode, error) {
-	return b.tree.InclusionProof(int(position - 1))
-}
-
-// MerkleTree returns the underlying tree for consistency proofs.
-func (b *Board) MerkleTree() *merkle.Tree {
-	return b.tree
 }
 
 // Store returns the underlying store for read operations.

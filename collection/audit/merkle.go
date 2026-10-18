@@ -12,5 +12,9 @@ func chainsMerkleRoot(jcsChains [][]byte) []byte {
 	for _, leaf := range jcsChains {
 		tree.Append(leaf)
 	}
-	return tree.Root()
+	if len(jcsChains) == 0 {
+		return nil
+	}
+	root := tree.Root()
+	return root[:]
 }
