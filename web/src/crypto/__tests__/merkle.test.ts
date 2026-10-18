@@ -44,6 +44,25 @@ interface MerkleVectors {
     root2_hex: string
     proof_hex: string[]
   }[]
+  uniform: {
+    leaf_hex: string
+    inclusion: {
+      case: string
+      index: number
+      size: number
+      leaf_hash_hex: string
+      proof_hex: string[]
+      root_hex: string
+    }[]
+    consistency: {
+      case: string
+      size1: number
+      size2: number
+      root1_hex: string
+      root2_hex: string
+      proof_hex: string[]
+    }[]
+  }
 }
 
 const vectors = JSON.parse(
@@ -99,6 +118,11 @@ describe('verifyInclusion', () => {
       expect(verifyInclusion(h(v.leaf_hash_hex), v.index, v.size, hs(v.proof_hex), h(v.root_hex))).toBe(false)
     })
   }
+  for (const v of vectors.uniform.inclusion) {
+    it(`accepts ${v.case}`, () => {
+      expect(verifyInclusion(h(v.leaf_hash_hex), v.index, v.size, hs(v.proof_hex), h(v.root_hex))).toBe(true)
+    })
+  }
 })
 
 describe('verifyConsistency', () => {
@@ -110,6 +134,11 @@ describe('verifyConsistency', () => {
   for (const v of vectors.invalid_consistency) {
     it(`rejects ${v.case}`, () => {
       expect(verifyConsistency(v.size1, v.size2, h(v.root1_hex), h(v.root2_hex), hs(v.proof_hex))).toBe(false)
+    })
+  }
+  for (const v of vectors.uniform.consistency) {
+    it(`accepts ${v.case}`, () => {
+      expect(verifyConsistency(v.size1, v.size2, h(v.root1_hex), h(v.root2_hex), hs(v.proof_hex))).toBe(true)
     })
   }
 })
@@ -295,5 +324,7 @@ describe('vector file', () => {
     expect(vectors.consistency.length).toBeGreaterThan(0)
     expect(vectors.invalid_inclusion.length).toBeGreaterThan(0)
     expect(vectors.invalid_consistency.length).toBeGreaterThan(0)
+    expect(vectors.uniform.inclusion.length).toBeGreaterThan(0)
+    expect(vectors.uniform.consistency.length).toBeGreaterThan(0)
   })
 })

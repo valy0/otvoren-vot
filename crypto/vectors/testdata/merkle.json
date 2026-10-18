@@ -1701,5 +1701,60 @@
         "d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7"
       ]
     }
-  ]
+  ],
+  "uniform": {
+    "leaf_hex": "",
+    "inclusion": [
+      {
+        "case": "uniform_5x2p32_plus1",
+        "index": 21474836481,
+        "size": 21474836482,
+        "leaf_hash_hex": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+        "proof_hex": [
+          "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+          "a5dfa832364e6e75e05fd480f7561e49e5935eb85736cdd869dd19ebab11b912",
+          "545ef2e7c33b35c29cdb17f6793c0ae5c5261bf75c765160c94863f24ff11691"
+        ],
+        "root_hex": "c103f623e7ffb07cf18d0033800d221e7b1f98516d52d75da570494b4e6f1ed9"
+      }
+    ],
+    "consistency": [
+      {
+        "case": "uniform_7x2p32_plus2_to_plus3",
+        "size1": 30064771074,
+        "size2": 30064771075,
+        "root1_hex": "693946f631d1981e02de1e633ed9f27f75732358b289507de059e701e5686deb",
+        "root2_hex": "6e199617f272c67bb25fcb59b0128d2bc036285585d1da8b76b0c46c7ef8f965",
+        "proof_hex": [
+          "fe43d66afa4a9a5c4f9c9da89f4ffb52635c8f342e7ffb731d68e36c5982072a",
+          "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+          "a5dfa832364e6e75e05fd480f7561e49e5935eb85736cdd869dd19ebab11b912",
+          "1f07df56447be060014f88aebfbf223f81451d2bc7685889acbce997b609e788",
+          "545ef2e7c33b35c29cdb17f6793c0ae5c5261bf75c765160c94863f24ff11691"
+        ]
+      },
+      {
+        "case": "uniform_2p49_plus1_to_plus2",
+        "size1": 562949953421313,
+        "size2": 562949953421314,
+        "root1_hex": "d325acc523a9d9d2aac3f41c686567bb6a432656d41bb766cd04e6e1a814858a",
+        "root2_hex": "a65eb6d417a7059356f71bb70508d5406e0b94d431c04c3b94936341315da818",
+        "proof_hex": [
+          "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+          "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+          "ac118efae070bbacde8e7badb95642bd7d1268ff272c7e55ca8cce66717e3863"
+        ]
+      },
+      {
+        "case": "uniform_2p31_to_plus1",
+        "size1": 2147483648,
+        "size2": 2147483649,
+        "root1_hex": "c802422af536d1fba84e02a6a8f5693778de790f8bcb51dfe220c2820c11279f",
+        "root2_hex": "68799a3b1615778d6355a90dff4b2191ab5cce5bdbea2e5c7d136215c0d9934e",
+        "proof_hex": [
+          "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+        ]
+      }
+    ]
+  }
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"math/bits"
 	"os"
 	"slices"
 	"testing"
@@ -27,6 +28,7 @@ type MerkleVectors struct {
 	Consistency        []MerkleConsistency        `json:"consistency"`
 	InvalidInclusion   []InvalidMerkleInclusion   `json:"invalid_inclusion"`
 	InvalidConsistency []InvalidMerkleConsistency `json:"invalid_consistency"`
+	Uniform            MerkleUniform              `json:"uniform"`
 }
 
 type MerkleRoot struct {
@@ -68,6 +70,35 @@ type InvalidMerkleConsistency struct {
 	ProofHex []string `json:"proof_hex"`
 }
 
+// MerkleUniform holds valid proofs in trees of identical leaves, each leaf
+// LeafHex, at sizes past 2^31 that no tree in memory could reach. They pin
+// the 64-bit width of the verifiers' walks: a port that shifts or masks an
+// index or size in 32 bits, or tests for a power of two in floating point,
+// rejects at least one of them.
+type MerkleUniform struct {
+	LeafHex     string                     `json:"leaf_hex"`
+	Inclusion   []UniformMerkleInclusion   `json:"inclusion"`
+	Consistency []UniformMerkleConsistency `json:"consistency"`
+}
+
+type UniformMerkleInclusion struct {
+	Case        string   `json:"case"`
+	Index       uint64   `json:"index"`
+	Size        uint64   `json:"size"`
+	LeafHashHex string   `json:"leaf_hash_hex"`
+	ProofHex    []string `json:"proof_hex"`
+	RootHex     string   `json:"root_hex"`
+}
+
+type UniformMerkleConsistency struct {
+	Case     string   `json:"case"`
+	Size1    uint64   `json:"size1"`
+	Size2    uint64   `json:"size2"`
+	Root1Hex string   `json:"root1_hex"`
+	Root2Hex string   `json:"root2_hex"`
+	ProofHex []string `json:"proof_hex"`
+}
+
 // merkleLeavesHex: the 8 RFC 9162 reference leaves, then three more.
 var merkleLeavesHex = []string{
 	"", "00", "10", "2021", "3031", "40414243",
@@ -81,6 +112,23 @@ var requiredInvalidInclusion = []string{
 	"index_past_u32", "overlong_proof",
 }
 
+// The uniform cases. In the names, 5x2p32_plus1 is 5·2^32 + 1.
+var uniformInclusionCases = []struct {
+	name        string
+	index, size uint64
+}{
+	{"uniform_5x2p32_plus1", 5<<32 + 1, 5<<32 + 2},
+}
+
+var uniformConsistencyCases = []struct {
+	name         string
+	size1, size2 uint64
+}{
+	{"uniform_7x2p32_plus2_to_plus3", 7<<32 + 2, 7<<32 + 3},
+	{"uniform_2p49_plus1_to_plus2", 1<<49 + 1, 1<<49 + 2},
+	{"uniform_2p31_to_plus1", 1 << 31, 1<<31 + 1},
+}
+
 var requiredInvalidConsistency = []string{
 	"size1_greater", "equal_sizes_nonempty_proof", "equal_sizes_different_roots",
 	"zero_size1_nonempty_proof", "truncated_proof", "extra_hash", "swapped_roots",
@@ -91,6 +139,115 @@ var requiredInvalidConsistency = []string{
 }
 
 func hx(h merkle.Hash) string { return hex.EncodeToString(h[:]) }
+
+// uniformTree computes MTH, PATH and SUBPROOF (RFC 9162 §2.1.1, §2.1.3.1,
+// §2.1.4.1) for the tree of n identical leaves from n alone, with no tree.
+// Every range the RFC recursion visits is either a complete subtree of 2^j
+// leaves, whose head H_j is memoised, or one ragged right edge per level, so
+// each call costs O(log² n) hashes even at n near 2^53. It transcribes the
+// RFC independently of merkle.Tree, which TestUniformTreeMatchesTree checks
+// it against.
+type uniformTree struct {
+	complete []merkle.Hash // complete[j] = H_j, the head of 2^j identical leaves
+}
+
+func newUniformTree(leaf []byte) *uniformTree {
+	return &uniformTree{complete: []merkle.Hash{merkle.LeafHash(leaf)}}
+}
+
+// h returns H_j: H_0 is the leaf hash and H_{j+1} = NodeHash(H_j, H_j).
+func (u *uniformTree) h(j int) merkle.Hash {
+	for len(u.complete) <= j {
+		last := u.complete[len(u.complete)-1]
+		u.complete = append(u.complete, merkle.NodeHash(last, last))
+	}
+	return u.complete[j]
+}
+
+// uniformSplit returns k, the largest power of two strictly less than n, for
+// n >= 2.
+func uniformSplit(n uint64) uint64 { return 1 << (bits.Len64(n-1) - 1) }
+
+// mth returns MTH(D[n]).
+func (u *uniformTree) mth(n uint64) merkle.Hash {
+	if n == 0 {
+		return merkle.EmptyRoot()
+	}
+	if n&(n-1) == 0 {
+		return u.h(bits.TrailingZeros64(n))
+	}
+	k := uniformSplit(n)
+	return merkle.NodeHash(u.mth(k), u.mth(n-k))
+}
+
+// path returns PATH(m, D[n]) for 0 <= m < n. D[k:n] holds n-k identical
+// leaves, so it is the tree of n-k leaves.
+func (u *uniformTree) path(m, n uint64) []merkle.Hash {
+	if n == 1 {
+		return []merkle.Hash{}
+	}
+	k := uniformSplit(n)
+	if m < k {
+		return append(u.path(m, k), u.mth(n-k))
+	}
+	return append(u.path(m-k, n-k), u.mth(k))
+}
+
+// subproof returns SUBPROOF(m, D[n], b) for 0 < m <= n; PROOF(m, D[n]) is
+// subproof(m, n, true).
+func (u *uniformTree) subproof(m, n uint64, b bool) []merkle.Hash {
+	if m == n {
+		if b {
+			return []merkle.Hash{}
+		}
+		return []merkle.Hash{u.mth(n)}
+	}
+	k := uniformSplit(n)
+	if m <= k {
+		return append(u.subproof(m, k, b), u.mth(n-k))
+	}
+	return append(u.subproof(m-k, n-k, false), u.mth(k))
+}
+
+// TestUniformTreeMatchesTree checks the uniformTree helper against a real
+// merkle.Tree of identical leaves at every size up to 70: every root, every
+// PATH and every SUBPROOF.
+func TestUniformTreeMatchesTree(t *testing.T) {
+	const maxSize = 70
+	leaf := []byte("uniform")
+	u := newUniformTree(leaf)
+	tree := merkle.New()
+	for range maxSize {
+		tree.Append(leaf)
+	}
+	for n := uint64(0); n <= maxSize; n++ {
+		want, err := tree.RootAt(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := u.mth(n); got != want {
+			t.Fatalf("MTH(D[%d]): helper %x, tree %x", n, got, want)
+		}
+		for m := uint64(0); m < n; m++ {
+			want, err := tree.InclusionProof(m, n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := u.path(m, n); !slices.Equal(got, want) {
+				t.Fatalf("PATH(%d, D[%d]): helper %x, tree %x", m, n, got, want)
+			}
+		}
+		for m := uint64(1); m <= n; m++ {
+			want, err := tree.ConsistencyProof(m, n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := u.subproof(m, n, true); !slices.Equal(got, want) {
+				t.Fatalf("PROOF(%d, D[%d]): helper %x, tree %x", m, n, got, want)
+			}
+		}
+	}
+}
 
 // hxs encodes hashes as a non-nil slice, so an empty proof marshals as [].
 func hxs(hs []merkle.Hash) []string {
@@ -230,7 +387,100 @@ func buildMerkleVectors(t testing.TB) MerkleVectors {
 	d45 := merkle.NodeHash(leaf(4), leaf(5))
 	ic("equal_sizes_walk_accepts", 6, 6, root(6), root(6), []merkle.Hash{d45, root(4)})
 
+	// Uniform: valid proofs at sizes no tree in memory reaches, from the
+	// uniformTree helper. The leaf is the empty string.
+	v.Uniform = MerkleUniform{
+		LeafHex:     "",
+		Inclusion:   []UniformMerkleInclusion{},
+		Consistency: []UniformMerkleConsistency{},
+	}
+	u := newUniformTree(nil)
+	for _, c := range uniformInclusionCases {
+		v.Uniform.Inclusion = append(v.Uniform.Inclusion, UniformMerkleInclusion{
+			Case: c.name, Index: c.index, Size: c.size, LeafHashHex: hx(u.h(0)),
+			ProofHex: hxs(u.path(c.index, c.size)), RootHex: hx(u.mth(c.size)),
+		})
+	}
+	for _, c := range uniformConsistencyCases {
+		v.Uniform.Consistency = append(v.Uniform.Consistency, UniformMerkleConsistency{
+			Case: c.name, Size1: c.size1, Size2: c.size2,
+			Root1Hex: hx(u.mth(c.size1)), Root2Hex: hx(u.mth(c.size2)),
+			ProofHex: hxs(u.subproof(c.size1, c.size2, true)),
+		})
+	}
+
 	return v
+}
+
+// TestUniformVectorsHandDerived checks the generated uniform entries against
+// proofs and roots derived by hand from the RFC 9162 recursion, independently
+// of the uniformTree helper. H_0 = LeafHash(""), H_{j+1} = NodeHash(H_j,
+// H_j), and H(a, b) = NodeHash(a, b).
+func TestUniformVectorsHandDerived(t *testing.T) {
+	var hj [50]merkle.Hash
+	hj[0] = merkle.LeafHash(nil)
+	for j := 1; j < len(hj); j++ {
+		hj[j] = merkle.NodeHash(hj[j-1], hj[j-1])
+	}
+	if hx(hj[0]) != "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d" {
+		t.Fatalf("H_0 = %s", hx(hj[0]))
+	}
+	H := merkle.NodeHash
+	type want struct {
+		proof        []merkle.Hash
+		root1, root2 merkle.Hash
+	}
+	wantInclusion := map[string]want{
+		"uniform_5x2p32_plus1": {
+			proof: []merkle.Hash{hj[0], hj[32], hj[34]},
+			root1: H(hj[34], H(hj[32], hj[1])),
+		},
+	}
+	wantConsistency := map[string]want{
+		"uniform_7x2p32_plus2_to_plus3": {
+			proof: []merkle.Hash{hj[1], hj[0], hj[32], hj[33], hj[34]},
+			root1: H(hj[34], H(hj[33], H(hj[32], hj[1]))),
+			root2: H(hj[34], H(hj[33], H(hj[32], H(hj[1], hj[0])))),
+		},
+		"uniform_2p49_plus1_to_plus2": {
+			proof: []merkle.Hash{hj[0], hj[0], hj[49]},
+			root1: H(hj[49], hj[0]),
+			root2: H(hj[49], hj[1]),
+		},
+		"uniform_2p31_to_plus1": {
+			proof: []merkle.Hash{hj[0]},
+			root1: hj[31],
+			root2: H(hj[31], hj[0]),
+		},
+	}
+
+	v := buildMerkleVectors(t).Uniform
+	if len(v.Inclusion) != len(wantInclusion) || len(v.Consistency) != len(wantConsistency) {
+		t.Fatalf("uniform has %d inclusion and %d consistency entries, want %d and %d",
+			len(v.Inclusion), len(v.Consistency), len(wantInclusion), len(wantConsistency))
+	}
+	for _, e := range v.Inclusion {
+		w, ok := wantInclusion[e.Case]
+		if !ok {
+			t.Fatalf("unexpected uniform inclusion case %q", e.Case)
+		}
+		if e.RootHex != "c103f623e7ffb07cf18d0033800d221e7b1f98516d52d75da570494b4e6f1ed9" {
+			t.Errorf("%s: root %s", e.Case, e.RootHex)
+		}
+		if e.LeafHashHex != hx(hj[0]) || e.RootHex != hx(w.root1) || !slices.Equal(e.ProofHex, hxs(w.proof)) {
+			t.Errorf("%s: generated %+v, hand-derived proof %v root %s", e.Case, e, hxs(w.proof), hx(w.root1))
+		}
+	}
+	for _, e := range v.Consistency {
+		w, ok := wantConsistency[e.Case]
+		if !ok {
+			t.Fatalf("unexpected uniform consistency case %q", e.Case)
+		}
+		if e.Root1Hex != hx(w.root1) || e.Root2Hex != hx(w.root2) || !slices.Equal(e.ProofHex, hxs(w.proof)) {
+			t.Errorf("%s: generated %+v, hand-derived proof %v roots %s %s",
+				e.Case, e, hxs(w.proof), hx(w.root1), hx(w.root2))
+		}
+	}
 }
 
 func marshalMerkleVectors(t testing.TB) []byte {
@@ -299,7 +549,8 @@ func TestVerifyMerkleVectors(t *testing.T) {
 		t.Fatal("leaves_hex is null, want a list")
 	}
 	if len(v.LeavesHex) == 0 || len(v.Roots) == 0 || len(v.Inclusion) == 0 ||
-		len(v.Consistency) == 0 || len(v.InvalidInclusion) == 0 || len(v.InvalidConsistency) == 0 {
+		len(v.Consistency) == 0 || len(v.InvalidInclusion) == 0 || len(v.InvalidConsistency) == 0 ||
+		len(v.Uniform.Inclusion) == 0 || len(v.Uniform.Consistency) == 0 {
 		t.Fatal("a category of merkle.json is empty")
 	}
 
@@ -385,6 +636,53 @@ func TestVerifyMerkleVectors(t *testing.T) {
 	for _, name := range requiredInvalidConsistency {
 		if !seenC[name] {
 			t.Errorf("invalid_consistency case %q missing", name)
+		}
+	}
+
+	// Uniform: no tree of these sizes can be built, so roots are checked
+	// with the uniformTree helper, never tree.RootAt.
+	uniformLeaf, err := hex.DecodeString(v.Uniform.LeafHex)
+	if err != nil {
+		t.Fatalf("uniform leaf_hex: %v", err)
+	}
+	u := newUniformTree(uniformLeaf)
+	seenU := map[string]bool{}
+	for _, e := range v.Uniform.Inclusion {
+		small(e.Case, e.Index, e.Size)
+		if seenU[e.Case] {
+			t.Errorf("duplicate uniform case %q", e.Case)
+		}
+		seenU[e.Case] = true
+		if e.LeafHashHex != hx(u.h(0)) || e.RootHex != hx(u.mth(e.Size)) {
+			t.Errorf("uniform %q: leaf or root does not match the uniform tree", e.Case)
+		}
+		if err := merkle.VerifyInclusion(decodeHash(t, e.LeafHashHex), e.Index, e.Size,
+			decodeHashes(t, e.ProofHex), decodeHash(t, e.RootHex)); err != nil {
+			t.Errorf("uniform %q: %v", e.Case, err)
+		}
+	}
+	for _, e := range v.Uniform.Consistency {
+		small(e.Case, e.Size1, e.Size2)
+		if seenU[e.Case] {
+			t.Errorf("duplicate uniform case %q", e.Case)
+		}
+		seenU[e.Case] = true
+		if e.Root1Hex != hx(u.mth(e.Size1)) || e.Root2Hex != hx(u.mth(e.Size2)) {
+			t.Errorf("uniform %q: a root does not match the uniform tree", e.Case)
+		}
+		if err := merkle.VerifyConsistency(e.Size1, e.Size2, decodeHash(t, e.Root1Hex),
+			decodeHash(t, e.Root2Hex), decodeHashes(t, e.ProofHex)); err != nil {
+			t.Errorf("uniform %q: %v", e.Case, err)
+		}
+	}
+	for _, c := range uniformInclusionCases {
+		if !seenU[c.name] {
+			t.Errorf("uniform case %q missing", c.name)
+		}
+	}
+	for _, c := range uniformConsistencyCases {
+		if !seenU[c.name] {
+			t.Errorf("uniform case %q missing", c.name)
 		}
 	}
 }
