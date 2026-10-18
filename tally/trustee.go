@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
+	"github.com/valy0/otvoren-vot/crypto/group"
 )
 
 // TrusteeKey represents a single trustee's public verification key as loaded
@@ -20,13 +21,13 @@ type TrusteeKey struct {
 // TrusteeKeySet holds the parsed trustee verification keys indexed by trustee
 // number.
 type TrusteeKeySet struct {
-	Keys map[int]*edwards25519.Point
+	Keys map[int]*ristretto255.Element
 }
 
 // LoadTrusteeKeys reads a JSON file containing trustee verification keys and
-// returns a TrusteeKeySet. Each key must be a valid 32-byte compressed
-// Ristretto255 point encoded as 64 hex characters. The function fails fast on
-// any parse or validation error.
+// returns a TrusteeKeySet. Each key must be a canonical, non-identity 32-byte
+// Ristretto255 encoding (group.DecodeElement) as 64 hex characters. The
+// function fails fast on any parse or validation error.
 func LoadTrusteeKeys(path string) (*TrusteeKeySet, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -42,7 +43,7 @@ func LoadTrusteeKeys(path string) (*TrusteeKeySet, error) {
 		return nil, fmt.Errorf("trustee key file is empty")
 	}
 
-	keys := make(map[int]*edwards25519.Point, len(entries))
+	keys := make(map[int]*ristretto255.Element, len(entries))
 	for _, entry := range entries {
 		if entry.Index < 1 {
 			return nil, fmt.Errorf("trustee index must be >= 1, got %d", entry.Index)
@@ -55,11 +56,10 @@ func LoadTrusteeKeys(path string) (*TrusteeKeySet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("trustee %d: invalid hex: %w", entry.Index, err)
 		}
-		if len(pointBytes) != 32 {
-			return nil, fmt.Errorf("trustee %d: expected 32 bytes, got %d", entry.Index, len(pointBytes))
-		}
 
-		point, err := new(edwards25519.Point).SetBytes(pointBytes)
+		// group.DecodeElement rejects a wrong length, a non-canonical
+		// encoding (such as an Edwards point's) and the identity.
+		point, err := group.DecodeElement(pointBytes)
 		if err != nil {
 			return nil, fmt.Errorf("trustee %d: invalid ristretto255 point: %w", entry.Index, err)
 		}

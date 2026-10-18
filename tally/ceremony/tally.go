@@ -1,10 +1,12 @@
 package ceremony
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/elgamal"
 	"github.com/valy0/otvoren-vot/crypto/threshold"
 )
@@ -73,63 +75,58 @@ func ComputeTally(ballots []SerializedBallot) (*TallyResult, error) {
 	}, nil
 }
 
-func ciphertextFromHex(hex string) (*elgamal.Ciphertext, error) {
-	data, err := hexDecode(hex)
+// ciphertextFromHex decodes one hex-encoded 64-byte ciphertext through
+// elgamal.CiphertextFromBytes, so both halves are canonical, non-identity
+// elements.
+func ciphertextFromHex(s string) (*elgamal.Ciphertext, error) {
+	data, err := hex.DecodeString(s)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode ciphertext hex: %w", err)
 	}
 	return elgamal.CiphertextFromBytes(data)
 }
 
-func hexDecode(s string) ([]byte, error) {
-	b := make([]byte, len(s)/2)
-	for i := 0; i < len(s); i += 2 {
-		var v byte
-		for j := 0; j < 2; j++ {
-			c := s[i+j]
-			switch {
-			case c >= '0' && c <= '9':
-				v = v*16 + c - '0'
-			case c >= 'a' && c <= 'f':
-				v = v*16 + c - 'a' + 10
-			case c >= 'A' && c <= 'F':
-				v = v*16 + c - 'A' + 10
-			default:
-				return nil, fmt.Errorf("invalid hex char: %c", c)
-			}
-		}
-		b[i/2] = v
+// DecryptTally decrypts every slot of tally with threshold.Combine, which
+// re-verifies each partial's proof before combining. contexts[slot] is the
+// slot context built from tally.EncryptedSums; partials maps a trustee index
+// to that trustee's partials in slot order; trustees lists the quorum
+// trustee indices whose partials are combined (the first quorum entries of
+// the ceremony's trustee order); keys maps a trustee index to its
+// verification key. It returns the plaintext vote count of every slot.
+func DecryptTally(tally *TallyResult, contexts []threshold.SlotContext, partials map[int][]*threshold.Partial, trustees []int, keys map[int]*ristretto255.Element, quorum int) ([]int, error) {
+	if tally == nil {
+		return nil, errors.New("decrypt tally: nil tally")
 	}
-	return b, nil
-}
+	if len(contexts) != len(tally.EncryptedSums) {
+		return nil, fmt.Errorf("decrypt tally: %d slot contexts for %d slots", len(contexts), len(tally.EncryptedSums))
+	}
+	if len(trustees) != quorum {
+		return nil, fmt.Errorf("decrypt tally: %d trustees for threshold %d", len(trustees), quorum)
+	}
 
-// DecryptTally decrypts the tally result using threshold partial decryptions.
-// Returns plaintext vote counts per party.
-func DecryptTally(tally *TallyResult, partials []map[int]*PartialDecryptionData, trusteeIndices []int) ([]int, error) {
-	results := make([]int, tally.NumParties)
-
-	for i, encSum := range tally.EncryptedSums {
-		// Collect partial decryptions for this party slot
-		pds := make([]*threshold.PartialDecryption, len(trusteeIndices))
-		for j := range trusteeIndices {
-			pd := partials[j][i]
-			if pd == nil {
-				return nil, fmt.Errorf("missing partial decryption from trustee %d for party %d", trusteeIndices[j], i)
+	results := make([]int, len(tally.EncryptedSums))
+	for slot, ct := range tally.EncryptedSums {
+		if contexts[slot].SlotIndex != uint32(slot) {
+			return nil, fmt.Errorf("decrypt tally: context %d has slot index %d", slot, contexts[slot].SlotIndex)
+		}
+		slotPartials := make([]*threshold.Partial, len(trustees))
+		for j, tidx := range trustees {
+			tp := partials[tidx]
+			if slot >= len(tp) || tp[slot] == nil {
+				return nil, fmt.Errorf("decrypt tally: missing partial decryption from trustee %d for party %d", tidx, slot)
 			}
-			pds[j] = &threshold.PartialDecryption{D: pd.D}
+			if tp[slot].TrusteeIndex != tidx {
+				return nil, fmt.Errorf("decrypt tally: partial stored for trustee %d carries trustee index %d", tidx, tp[slot].TrusteeIndex)
+			}
+			slotPartials[j] = tp[slot]
 		}
 
-		result := threshold.CombinePartials(encSum, pds, trusteeIndices, elgamal.MaxDecrypt)
-		if result == -1 {
-			return nil, fmt.Errorf("BSGS failed for party %d", i)
+		m, err := threshold.Combine(contexts[slot], ct, slotPartials, keys, quorum, elgamal.MaxDecrypt)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt tally: party %d: %w", slot, err)
 		}
-		results[i] = result
+		results[slot] = m
 	}
 
 	return results, nil
-}
-
-// PartialDecryptionData holds a parsed partial decryption.
-type PartialDecryptionData struct {
-	D *edwards25519.Point
 }

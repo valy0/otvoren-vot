@@ -7,10 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/elgamal"
+	"github.com/valy0/otvoren-vot/crypto/group"
+	"github.com/valy0/otvoren-vot/crypto/proof"
+	"github.com/valy0/otvoren-vot/crypto/threshold"
 
 	"github.com/valy0/otvoren-vot/tally/ceremony"
 )
@@ -38,10 +42,12 @@ type CeremonyState struct {
 	BallotCount int      `json:"ballot_count"`
 	PartyCount  int      `json:"party_count"`
 
-	DedupProof   *ceremony.DedupProof                       `json:"dedup_proof,omitempty"`
-	Partials     map[int][]*ceremony.PartialDecryptionData   `json:"-"` // custom serialization
-	TrusteeOrder []int                                      `json:"trustee_order,omitempty"`
-	Results      []int                                      `json:"results,omitempty"`
+	DedupProof *ceremony.DedupProof `json:"dedup_proof,omitempty"`
+	// Partials maps a trustee index to that trustee's verified partial
+	// decryptions in slot order (custom serialization).
+	Partials     map[int][]*threshold.Partial `json:"-"`
+	TrusteeOrder []int                        `json:"trustee_order,omitempty"`
+	Results      []int                        `json:"results,omitempty"`
 
 	StartedAt   time.Time  `json:"started_at"`
 	DecryptedAt *time.Time `json:"decrypted_at,omitempty"`
@@ -76,10 +82,58 @@ func (cs *CeremonyState) TallyResult() *ceremony.TallyResult {
 
 // --- Custom JSON serialization for Partials ---
 
-// partialJSON is the on-disk representation of a single PartialDecryptionData.
-// The edwards25519.Point is hex-encoded as 32 bytes.
+// partialJSON is the on-disk representation of one threshold.Partial: the
+// partial decryption D and its Chaum-Pedersen proof (U, V, Z), each
+// hex-encoded as 32 bytes. The trustee index is the map key.
 type partialJSON struct {
-	D string `json:"d"` // hex-encoded 32-byte compressed point
+	D string `json:"d"` // 32-byte element
+	U string `json:"u"` // 32-byte element
+	V string `json:"v"` // 32-byte element
+	Z string `json:"z"` // 32-byte canonical scalar
+}
+
+// decodeHexElement decodes a hex-encoded 32-byte canonical, non-identity
+// ristretto255 element (see group.DecodeElement).
+func decodeHexElement(s string) (*ristretto255.Element, error) {
+	if s == "" {
+		return nil, errors.New("missing")
+	}
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex: %w", err)
+	}
+	return group.DecodeElement(b)
+}
+
+// decodeHexScalar decodes a hex-encoded 32-byte canonical scalar (see
+// group.DecodeScalar).
+func decodeHexScalar(s string) (*ristretto255.Scalar, error) {
+	if s == "" {
+		return nil, errors.New("missing")
+	}
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex: %w", err)
+	}
+	return group.DecodeScalar(b)
+}
+
+// decodeProofHex decodes a Chaum-Pedersen proof from its hex-encoded u, v
+// and z. Every field must be present and decode.
+func decodeProofHex(u, v, z string) (*proof.ChaumPedersenProof, error) {
+	ue, err := decodeHexElement(u)
+	if err != nil {
+		return nil, fmt.Errorf("proof u: %w", err)
+	}
+	ve, err := decodeHexElement(v)
+	if err != nil {
+		return nil, fmt.Errorf("proof v: %w", err)
+	}
+	zs, err := decodeHexScalar(z)
+	if err != nil {
+		return nil, fmt.Errorf("proof z: %w", err)
+	}
+	return &proof.ChaumPedersenProof{U: ue, V: ve, Z: zs}, nil
 }
 
 // ceremonyStateJSON is the JSON-friendly mirror of CeremonyState, with
@@ -94,7 +148,7 @@ type ceremonyStateJSON struct {
 	DedupProof  *ceremony.DedupProof `json:"dedup_proof,omitempty"`
 
 	// map key is trustee index (as string because JSON keys must be strings);
-	// value is a slice of hex-encoded partial decryptions.
+	// value is that trustee's hex-encoded partial decryptions in slot order.
 	Partials map[string][]partialJSON `json:"partials,omitempty"`
 
 	TrusteeOrder []int  `json:"trustee_order,omitempty"`
@@ -125,14 +179,20 @@ func (cs *CeremonyState) MarshalJSON() ([]byte, error) {
 	if len(cs.Partials) > 0 {
 		j.Partials = make(map[string][]partialJSON, len(cs.Partials))
 		for idx, pds := range cs.Partials {
-			key := fmt.Sprintf("%d", idx)
 			encoded := make([]partialJSON, len(pds))
 			for i, pd := range pds {
+				if pd == nil || pd.D == nil || pd.Proof == nil ||
+					pd.Proof.U == nil || pd.Proof.V == nil || pd.Proof.Z == nil {
+					return nil, fmt.Errorf("partial %d/%d: missing D or proof", idx, i)
+				}
 				encoded[i] = partialJSON{
 					D: hex.EncodeToString(pd.D.Bytes()),
+					U: hex.EncodeToString(pd.Proof.U.Bytes()),
+					V: hex.EncodeToString(pd.Proof.V.Bytes()),
+					Z: hex.EncodeToString(pd.Proof.Z.Bytes()),
 				}
 			}
-			j.Partials[key] = encoded
+			j.Partials[strconv.Itoa(idx)] = encoded
 		}
 	}
 
@@ -170,24 +230,30 @@ func (cs *CeremonyState) UnmarshalJSON(data []byte) error {
 		cs.DecryptedAt = &dt
 	}
 
+	// Every stored partial must carry D and a complete, decodable proof. The
+	// proof cannot be re-verified here (the tally is not in the journal);
+	// threshold.Combine re-verifies every partial at decryption.
 	if len(j.Partials) > 0 {
-		cs.Partials = make(map[int][]*ceremony.PartialDecryptionData, len(j.Partials))
+		cs.Partials = make(map[int][]*threshold.Partial, len(j.Partials))
 		for key, pds := range j.Partials {
-			var idx int
-			if _, err := fmt.Sscanf(key, "%d", &idx); err != nil {
+			idx, err := strconv.Atoi(key)
+			if err != nil {
 				return fmt.Errorf("parse trustee index %q: %w", key, err)
 			}
-			decoded := make([]*ceremony.PartialDecryptionData, len(pds))
+			if len(pds) != j.PartyCount {
+				return fmt.Errorf("trustee %d: %d partials for %d parties", idx, len(pds), j.PartyCount)
+			}
+			decoded := make([]*threshold.Partial, len(pds))
 			for i, pj := range pds {
-				b, err := hex.DecodeString(pj.D)
+				d, err := decodeHexElement(pj.D)
 				if err != nil {
-					return fmt.Errorf("decode partial %d/%d D: %w", idx, i, err)
+					return fmt.Errorf("partial %d/%d d: %w", idx, i, err)
 				}
-				pt, err := new(edwards25519.Point).SetBytes(b)
+				pf, err := decodeProofHex(pj.U, pj.V, pj.Z)
 				if err != nil {
-					return fmt.Errorf("set point %d/%d: %w", idx, i, err)
+					return fmt.Errorf("partial %d/%d: %w", idx, i, err)
 				}
-				decoded[i] = &ceremony.PartialDecryptionData{D: pt}
+				decoded[i] = &threshold.Partial{TrusteeIndex: idx, D: d, Proof: pf}
 			}
 			cs.Partials[idx] = decoded
 		}
