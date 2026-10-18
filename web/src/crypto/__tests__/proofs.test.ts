@@ -14,7 +14,7 @@ import {
 } from '../proofs'
 
 import {
-  BINARY_DOMAIN, CANDIDATE_SUM_DOMAIN, ZERO, handBuiltDisjunctive, isZero, randomScalar,
+  BINARY_DOMAIN, CANDIDATE_SUM_DOMAIN, ONE, ZERO, handBuiltDisjunctive, isZero, randomScalar,
   zeroRandomnessSumOne, zeroRandomnessVector,
 } from './identityEdges'
 
@@ -526,8 +526,9 @@ describe('identity intermediates (accepted, as in Go)', () => {
 
   // aggCt and candSumCt are homomorphic sums the verifier derives, not wire
   // fields: randomness that sums to 0 mod ℓ makes them the identity, and Go's
-  // verifiers accept them. These proofs are built by hand so that only the
-  // verifier is under test.
+  // verifiers accept them. The two verifyCandidateSum tests below build their
+  // proofs by hand so that only the verifier is under test; the R_cand = 0
+  // verifyConsistency test after them builds through proveConsistency instead.
   for (const sum of [0, 1] as const) {
     it(`verifyCandidateSum accepts candidate randomness summing to 0 (aggregate c1 is the identity), sum=${sum}`, () => {
       const { pk } = makeKeyPair()
@@ -600,5 +601,45 @@ describe('identity intermediates (accepted, as in Go)', () => {
       }
       expect(() => proveSumOne(CTX, [ciphertext], randomness, bad)).toThrow()
     }
+  })
+})
+
+// A wire field that is the identity must be refused even when every equation
+// holds over it. Section B made the provers identity-tolerant, so proofs whose
+// equations hold over an identity statement can be built; the verifier alone
+// must reject them. (Every other identity case fails the equations too.)
+describe('identity wire fields are rejected even when the equations hold', () => {
+  const generator = () => getSodium().crypto_scalarmult_ristretto255_base(ONE)
+
+  it('verifyBinary rejects ct = (O, g), message 1 with r = 0', () => {
+    const { pk } = makeKeyPair()
+    const ct: Ciphertext = { c1: new Uint8Array(32), c2: generator() }
+    const proof = handBuiltDisjunctive(BINARY_DOMAIN, CTX, pk, ct, 1, ZERO, randomScalar(), randomScalar())
+    expect(verifyBinary(CTX, pk, ct, proof)).toBe(false)
+  })
+
+  it('verifyConsistency rejects a party ciphertext whose c1 is the identity', () => {
+    const sodium = getSodium()
+    const { pk } = makeKeyPair()
+    const partyCt: Ciphertext = { c1: new Uint8Array(32), c2: generator() }  // m = 1, r_party = 0
+    const rCand = randomScalar()
+    const candCt = encryptWithRandomness(1, rCand, pk)
+    const rDiff = sodium.crypto_core_ristretto255_scalar_negate(rCand)  // diff = 0
+    const proof = proveConsistency(CTX, 0, rDiff, pk, partyCt, candCt)
+    expect(verifyConsistency(CTX, pk, partyCt, candCt, proof)).toBe(false)
+  })
+
+  it('verifySumOne rejects a vector with a ciphertext whose c1 is the identity', () => {
+    const { pk } = makeKeyPair()
+    const r1 = randomScalar()
+    const r2 = randomScalar()
+    const cts: Ciphertext[] = [
+      { c1: new Uint8Array(32), c2: new Uint8Array(32) },  // 0 with r = 0
+      encryptWithRandomness(1, r1, pk),
+      encryptWithRandomness(0, r2, pk),
+    ]
+    const rSum = getSodium().crypto_core_ristretto255_scalar_add(r1, r2)
+    const proof = proveSumOne(CTX, cts, rSum, pk)
+    expect(verifySumOne(CTX, pk, cts, proof)).toBe(false)
   })
 })
