@@ -1,8 +1,9 @@
-package testdata
+package vectors
 
 import (
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"os"
 	"testing"
 
@@ -28,11 +29,11 @@ type ScalarBaseMultVector struct {
 }
 
 type ElGamalEncryptVector struct {
-	PublicKeyHex   string `json:"public_key_hex"`
-	RandomnessHex  string `json:"randomness_hex"`
-	Message        int    `json:"message"`
-	ExpectedC1Hex  string `json:"expected_c1_hex"`
-	ExpectedC2Hex  string `json:"expected_c2_hex"`
+	PublicKeyHex  string `json:"public_key_hex"`
+	RandomnessHex string `json:"randomness_hex"`
+	Message       int    `json:"message"`
+	ExpectedC1Hex string `json:"expected_c1_hex"`
+	ExpectedC2Hex string `json:"expected_c2_hex"`
 }
 
 type FiatShamirVector struct {
@@ -53,13 +54,13 @@ type BinaryProofFields struct {
 }
 
 type BinaryProofVector struct {
-	Domain         string            `json:"domain"`
-	PublicKeyHex   string            `json:"public_key_hex"`
-	RandomnessHex  string            `json:"randomness_hex"`
-	Message        int               `json:"message"`
-	CiphertextC1   string            `json:"ciphertext_c1_hex"`
-	CiphertextC2   string            `json:"ciphertext_c2_hex"`
-	ExpectedProof  BinaryProofFields `json:"expected_proof"`
+	Domain        string            `json:"domain"`
+	PublicKeyHex  string            `json:"public_key_hex"`
+	RandomnessHex string            `json:"randomness_hex"`
+	Message       int               `json:"message"`
+	CiphertextC1  string            `json:"ciphertext_c1_hex"`
+	CiphertextC2  string            `json:"ciphertext_c2_hex"`
+	ExpectedProof BinaryProofFields `json:"expected_proof"`
 }
 
 type CandidateSumVector struct {
@@ -73,15 +74,15 @@ type CandidateSumVector struct {
 }
 
 type ConsistencyVector struct {
-	PublicKeyHex     string            `json:"public_key_hex"`
-	PartyRandHex     string            `json:"party_randomness_hex"`
-	PartyMessage     int               `json:"party_message"`
-	PartyCt          [2]string         `json:"party_ciphertext_hex"`
-	CandRandomHexes  []string          `json:"cand_randomness_hexes"`
-	CandMessages     []int             `json:"cand_messages"`
-	CandSumCt        [2]string         `json:"cand_sum_ciphertext_hex"`
-	Diff             int               `json:"diff"`
-	ExpectedProof    BinaryProofFields `json:"expected_proof"`
+	PublicKeyHex    string            `json:"public_key_hex"`
+	PartyRandHex    string            `json:"party_randomness_hex"`
+	PartyMessage    int               `json:"party_message"`
+	PartyCt         [2]string         `json:"party_ciphertext_hex"`
+	CandRandomHexes []string          `json:"cand_randomness_hexes"`
+	CandMessages    []int             `json:"cand_messages"`
+	CandSumCt       [2]string         `json:"cand_sum_ciphertext_hex"`
+	Diff            int               `json:"diff"`
+	ExpectedProof   BinaryProofFields `json:"expected_proof"`
 }
 
 func hexEncode(b []byte) string {
@@ -107,13 +108,18 @@ func binaryProofFields(p *proof.BinaryProof) BinaryProofFields {
 	}
 }
 
-// TestGenerateVectors produces deterministic test vectors and writes them to vectors.json.
-// Run: go test -run TestGenerateVectors -v ./testdata/
+var update = flag.Bool("update", false, "rewrite testdata/vectors.json from the Go implementation")
+
+// TestGenerateVectors produces deterministic test vectors and writes them to testdata/vectors.json.
+// Run: go test ./vectors/ -run TestGenerateVectors -update -v
 //
 // The vectors are generated once in Go and checked into the repo. The TypeScript
 // implementation loads them and verifies its own crypto produces identical results
 // (for deterministic operations) or successfully verifies (for proofs).
 func TestGenerateVectors(t *testing.T) {
+	if !*update {
+		t.Skip("run with -update to regenerate")
+	}
 	var v Vectors
 
 	// --- Scalar base multiplication vectors ---
@@ -310,7 +316,7 @@ func TestGenerateVectors(t *testing.T) {
 		t.Fatal("failed to marshal vectors:", err)
 	}
 
-	outPath := "vectors.json"
+	outPath := "testdata/vectors.json"
 	if err := os.WriteFile(outPath, data, 0644); err != nil {
 		t.Fatal("failed to write vectors.json:", err)
 	}
@@ -321,9 +327,9 @@ func TestGenerateVectors(t *testing.T) {
 // TestVerifyVectors loads vectors.json and verifies the deterministic values
 // are correct and the proofs verify.
 func TestVerifyVectors(t *testing.T) {
-	data, err := os.ReadFile("vectors.json")
+	data, err := os.ReadFile("testdata/vectors.json")
 	if err != nil {
-		t.Skip("vectors.json not found; run TestGenerateVectors first")
+		t.Fatal("testdata/vectors.json not found; run: go test ./vectors/ -run TestGenerateVectors -update")
 	}
 
 	var v Vectors
