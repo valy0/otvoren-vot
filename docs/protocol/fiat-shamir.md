@@ -13,7 +13,7 @@ SHA-512, with the 64-byte digest reduced to a Ristretto255 scalar via
 
 | Library | Function |
 |---------|----------|
-| Go (`github.com/gtank/ristretto255`) | `ristretto255.NewScalar().SetUniformBytes(digest)` (64-byte SHA-512 digest) |
+| Go (`github.com/gtank/ristretto255`) | `ristretto255.NewScalar().SetUniformBytes(digest[:])` (64-byte SHA-512 digest `[64]byte`; returns `(*Scalar, error)`, an error only if the input is not 64 bytes) |
 | TypeScript (libsodium WASM) | `crypto_core_ristretto255_scalar_reduce(sha512(input))` |
 
 ## Transcript Format
@@ -25,7 +25,7 @@ hash_input = len_prefix(domain) || len_prefix(data[0]) || len_prefix(data[1]) ||
 where `len_prefix(x)` is:
 
 ```
-uint32_be(len(x)) || x
+u32be(len(x)) || x
 ```
 
 Each field is prefixed with a **4-byte big-endian unsigned 32-bit integer** encoding
@@ -47,7 +47,11 @@ big-endian encoding of the integer `n`. A `u32be` field is therefore written as
   normalisation, trimming or case folding). An empty identifier is invalid and
   must be rejected before any transcript is built.
 - **Indices (`index`, `trustee_index`, `slot_index`):** `u32be(n)`, carried as
-  `lp(u32be(n))`.
+  `lp(u32be(n))`. `index` is the statement index of `ballot-proofs.md` section
+  8.4. `trustee_index` is the trustee's Shamir index `i` in `1..n`, the `i` of
+  the share `x_i` and the verification key `h_i`. `slot_index` is the 0-based
+  position of the tally slot in the canonical slot order of `ballot-proofs.md`
+  section 8.4, the same position the slot's `(c1, c2)` has in `tally_digest`.
 - **Digests and commitments (`tally_digest`, `set_commitment`, `sealed_head`):**
   raw 32-byte SHA-256 outputs.
 
@@ -73,27 +77,36 @@ For the binary proof Fiat-Shamir challenge:
 
 ```
 hash_input =
-  uint32_be(31) || "otvoren-vot.ballot-binary-proof"   // domain
-  uint32_be(49) || utf8(election_id)                     // election_id (49 bytes in this example)
-  uint32_be(36) || utf8(ballot_id)                       // ballot_id (36 bytes in this example)
-  uint32_be(4)  || u32be(index)                          // statement index (4 bytes)
-  uint32_be(32) || public_key_bytes                      // public key (32 bytes)
-  uint32_be(32) || C1_bytes                              // ciphertext C1 (32 bytes)
-  uint32_be(32) || C2_bytes                              // ciphertext C2 (32 bytes)
-  uint32_be(32) || A0_bytes                              // commitment A0 (32 bytes)
-  uint32_be(32) || B0_bytes                              // commitment B0 (32 bytes)
-  uint32_be(32) || A1_bytes                              // commitment A1 (32 bytes)
-  uint32_be(32) || B1_bytes                              // commitment B1 (32 bytes)
+  u32be(31) || "otvoren-vot.ballot-binary-proof"   // domain
+  u32be(49) || utf8(election_id)                     // election_id (49 bytes in this example)
+  u32be(43) || utf8(ballot_id)                       // ballot_id (43 bytes, always)
+  u32be(4)  || u32be(index)                          // statement index (4 bytes)
+  u32be(32) || public_key_bytes                      // public key (32 bytes)
+  u32be(32) || C1_bytes                              // ciphertext C1 (32 bytes)
+  u32be(32) || C2_bytes                              // ciphertext C2 (32 bytes)
+  u32be(32) || A0_bytes                              // commitment A0 (32 bytes)
+  u32be(32) || B0_bytes                              // commitment B0 (32 bytes)
+  u32be(32) || A1_bytes                              // commitment A1 (32 bytes)
+  u32be(32) || B1_bytes                              // commitment B1 (32 bytes)
 ```
 
 In this example `election_id` is `избори-2027-народно-събрание`, which is 49
-UTF-8 bytes (Cyrillic letters take 2 bytes each), and `ballot_id` is a 36-character
-UUID string such as `0b8c1f5e-4a7d-4e2a-9c3b-6d1f2a8e7c40` (36 bytes). The
-identifier lengths are variable; only the structure is normative.
+UTF-8 bytes (Cyrillic letters take 2 bytes each). `ballot_id` is an example
+value only: 32 random bytes in base64url without padding is always 43
+characters (see `ballot-proofs.md` section 8.3), e.g.
+`Zm9yLXRoZS1leGFtcGxlLW9ubHktMzItYnl0ZXMtISE` (43 bytes). Only `election_id` is
+variable-length; the structure is what is normative.
 
-Total: domain (4 + 31 = 35) + election_id (4 + 49 = 53) + ballot_id
-(4 + 36 = 40) + index (4 + 4 = 8) + 7 x (4 + 32) = 252 =
-35 + 53 + 40 + 8 + 252 = 388 bytes input to SHA-512.
+Byte count of the example:
+
+```
+domain       = 4 + 31 = 35
+election_id  = 4 + 49 = 53
+ballot_id    = 4 + 43 = 47
+index        = 4 + 4  = 8
+7 statement fields = 7 x (4 + 32) = 252
+total        = 35 + 53 + 47 + 8 + 252 = 395 bytes input to SHA-512
+```
 
 ## Domain Separators
 
@@ -168,9 +181,12 @@ Domain: `otvoren-vot.chaum-pedersen`. Fields, in order, each `lp`-framed:
 
 That is the domain plus seven context fields, followed by the six statement
 and commitment points. It is the generic Chaum-Pedersen transcript
-`g, h, A, B, u, v` with `g = G`, `h = c1`, `A = h_i` (the trustee's public
-verification key share) and `B = d_i` (the partial decryption `x_i * c1`),
-and `(u, v)` the commitments `(k*G, k*c1)`.
+`g, h, A, B, u, v`, where `g, h, A, B` are the four statement points and
+`(u, v)` are the two commitments. For a partial decryption `g = G`, `h = c1`,
+`A = h_i` (the trustee's public verification key share) and `B = d_i` (the
+partial decryption `x_i * c1`), and the commitments are `u = k*G`, `v = k*c1`.
+In this document and in `threshold.md`, `A`/`B` are never commitments in the
+partial-decryption proof; the commitments are always `u` and `v`.
 
 The response is `z = k + e*x_i`. A verifier accepts iff both
 `z*G = u + e*h_i` and `z*c1 = v + e*d_i` hold.
@@ -181,15 +197,17 @@ Context definitions:
   computed over the published tally vector in canonical slot order (the order
   of `ballot-proofs.md` section 8.4); each entry `c1_j || c2_j` is 64 bytes.
   The domain `otvoren-vot.tally-vector` is 24 bytes.
-- `set_commitment` is Collection's salted commitment to the active set of
-  accepted ballots that produced the tally.
+- `set_commitment` is Collection's salted SHA-256 commitment to the active set
+  of accepted ballots that produced the tally (32 bytes). It is the SHA-256
+  commitment, not any other commitment Collection may also publish.
 - `sealed_head` is the SHA-256 of the bulletin board's sealed signed head at
   the time the tally was fixed.
 
 These bind a partial decryption to one election, one trustee, one slot, one
-exact tally vector, one ballot set and one board state. See the core-voting-loop
-design (section 5.2.4) for how `set_commitment` and `sealed_head` are produced
-and published.
+exact tally vector, one ballot set and one board state. The values
+`set_commitment` and `sealed_head` are produced by later work (Collection's
+handoff and the board seal); this document only fixes how they enter the
+transcript.
 
 ## Security Properties
 

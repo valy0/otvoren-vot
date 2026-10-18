@@ -58,7 +58,7 @@ The non-interactive proof is the tuple π = (A, z). The verifier recomputes e = 
 e = H("otvoren-vot.ballot-binary-proof" || x || A)
 ```
 
-Each proof type uses a distinct domain separator. The exact byte-level transcript of every proof, including the election, ballot and statement-index context that binds a proof to its place in a ballot, is specified in [fiat-shamir.md](fiat-shamir.md); the shorthand above is illustrative only.
+Each proof type uses a distinct domain separator. The exact byte-level transcript of every proof, including the election, ballot and statement-index context that binds a proof to its place in a ballot, is specified in [fiat-shamir.md](fiat-shamir.md). Every `H(...)` or `H_hash(...)` expression in this document (including the batching sketches in section 7) is illustrative shorthand; where it conflicts with fiat-shamir.md, fiat-shamir.md is normative.
 
 ---
 
@@ -103,7 +103,8 @@ STEP 1 — Commitment:
     B₁ = z₁·H - e₁·(C₂ - G)
 
 STEP 2 — Challenge:
-    e = H_hash("otvoren-vot.ballot-binary-proof" || C₁ || C₂ || A₀ || B₀ || A₁ || B₁)
+    e = FiatShamir(binary-proof transcript of fiat-shamir.md:
+        context, pk, C₁, C₂, A₀, B₀, A₁, B₁)
     e₀ = e - e₁ (mod q)
 
 STEP 3 — Response:
@@ -129,7 +130,8 @@ STEP 1 — Commitment:
     B₁ = k₁·H
 
 STEP 2 — Challenge:
-    e = H_hash("otvoren-vot.ballot-binary-proof" || C₁ || C₂ || A₀ || B₀ || A₁ || B₁)
+    e = FiatShamir(binary-proof transcript of fiat-shamir.md:
+        context, pk, C₁, C₂, A₀, B₀, A₁, B₁)
     e₁ = e - e₀ (mod q)
 
 STEP 3 — Response:
@@ -142,7 +144,7 @@ Given ciphertext (C₁, C₂) and proof π = (A₀, B₀, A₁, B₁, e₀, e₁
 
 ```
 1. Recompute challenge:
-   e = H_hash("otvoren-vot.ballot-binary-proof" || C₁ || C₂ || A₀ || B₀ || A₁ || B₁)
+   e = FiatShamir(same binary-proof transcript: context, pk, C₁, C₂, A₀, B₀, A₁, B₁)
 
 2. Check challenge partition:
    e₀ + e₁ ≡ e (mod q)
@@ -617,6 +619,8 @@ All group elements and scalars are encoded as 32-byte little-endian arrays, then
 ### 8.4 Statement indices
 
 Each ballot proof carries a statement `index` (a `u32`) in its Fiat-Shamir context (see [fiat-shamir.md](fiat-shamir.md)). Indices follow the canonical ciphertext slot order.
+
+**Notation.** `P` is `N_parties` of section 4.1, and `C_p` (0-based `p`) is `K_{p+1}` of section 4.1 (which numbers parties from 1).
 
 **Canonical slot order.** With `P` parties, `C_q` candidates in party `q`:
 

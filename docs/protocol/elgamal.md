@@ -300,7 +300,7 @@ The Chaum-Pedersen protocol (non-interactive via Fiat-Shamir):
 
 4. **Proof:** The tuple `(a1, a2, z)` is published alongside `d_i`.
 
-**Verification** (by anyone): Given `(g, h_i, c1, d_i, a1, a2, z)`:
+**Verification** (by anyone): Given `(g, h_i, c1, d_i, a1, a2, z)` plus the transcript context (`election_id`, `trustee_index`, `slot_index`, `c2`, `tally_digest`, `set_commitment`, `sealed_head`; full list in [fiat-shamir.md](fiat-shamir.md)):
 
 1. Recompute `e` from the same transcript.
 2. Check: `g^z == a1 * h_i^e`
@@ -455,32 +455,31 @@ This package implements RFC 9496 ristretto255 over a prime-order group. Key type
 import "github.com/gtank/ristretto255"
 
 // Scalars (elements of Z_q)
-x := ristretto255.NewScalar()      // private key / randomness
-x.SetUniformBytes(randomBytes[:])  // sample from 64 uniform bytes
+x, err := ristretto255.NewScalar().SetUniformBytes(randomBytes[:]) // private key / randomness; 64 uniform bytes
+if err != nil { /* input was not 64 bytes */ }
 
 // Points (elements of G)
-h := ristretto255.NewElement()
+h := ristretto255.NewIdentityElement()
 h.ScalarBaseMult(x)                // h = g^x  (g is the standard basepoint)
 
 // ElGamal encryption
-r := ristretto255.NewScalar()
-r.SetUniformBytes(randomBytes[:])
+r, err := ristretto255.NewScalar().SetUniformBytes(randomBytes[:]) // handle err as above
 
-c1 := ristretto255.NewElement()
+c1 := ristretto255.NewIdentityElement()
 c1.ScalarBaseMult(r)               // c1 = g^r
 
-hr := ristretto255.NewElement()
+hr := ristretto255.NewIdentityElement()
 hr.ScalarMult(r, h)                // h^r
 
-gm := ristretto255.NewElement()
+gm := ristretto255.NewIdentityElement()
 gm.ScalarBaseMult(m)               // g^m  (m is a Scalar holding 0 or 1)
 
-c2 := ristretto255.NewElement()
+c2 := ristretto255.NewIdentityElement()
 c2.Add(hr, gm)                     // c2 = h^r * g^m
 
 // Homomorphic addition (tallying)
-sum1 := ristretto255.NewElement().Add(ballot1_c1, ballot2_c1)
-sum2 := ristretto255.NewElement().Add(ballot1_c2, ballot2_c2)
+sum1 := ristretto255.NewIdentityElement().Add(ballot1_c1, ballot2_c1)
+sum2 := ristretto255.NewIdentityElement().Add(ballot1_c2, ballot2_c2)
 ```
 
 **Important:** `SetUniformBytes` takes 64 bytes (512 bits) and reduces modulo `q` to produce a uniformly distributed scalar. Do NOT use `SetCanonicalBytes` (32 bytes) for random scalar generation — it does not produce a uniform distribution over `Z_q`.
