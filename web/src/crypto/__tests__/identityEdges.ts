@@ -11,11 +11,45 @@ export const ZERO = new Uint8Array(32)
 export const ONE = new Uint8Array(32)
 ONE[0] = 1
 export const BINARY_DOMAIN = 'otvoren-vot.ballot-binary-proof'
-export const CONSISTENCY_DOMAIN = 'otvoren-vot.candidate-consistency-proof'
+export const CANDIDATE_SUM_DOMAIN = 'otvoren-vot.candidate-sum-01-proof'
 
 export const isZero = (b: Uint8Array) => b.every(x => x === 0)
 
 export const randomScalar = () => getSodium().crypto_core_ristretto255_scalar_random()
+
+const addScalars = (a: Uint8Array, b: Uint8Array) => getSodium().crypto_core_ristretto255_scalar_add(a, b)
+
+/** `n` ≥ 2 random scalars whose sum is 0 mod ℓ. */
+export function zeroSumScalars(n: number): Uint8Array[] {
+  if (n < 2) throw new Error('need at least two scalars')
+  const rs = Array.from({ length: n - 1 }, randomScalar)
+  rs.push(getSodium().crypto_core_ristretto255_scalar_negate(rs.reduce(addScalars)))
+  return rs
+}
+
+export interface EncryptedVector {
+  cts: Ciphertext[]
+  agg: Ciphertext
+  rSum: Uint8Array
+}
+
+/** Encrypts `bits` with randomness `rs`; returns the ciphertexts, their aggregate and the randomness sum. */
+export function encryptVectorWith(pk: Uint8Array, bits: readonly (0 | 1)[], rs: Uint8Array[]): EncryptedVector {
+  const cts = bits.map((b, i) => encryptWithRandomness(b, rs[i], pk))
+  const agg = homomorphicSum(cts)
+  if (agg === null) throw new Error('empty vector')
+  return { cts, agg, rSum: rs.reduce(addScalars) }
+}
+
+/**
+ * Encrypts `bits` with randomness that sums to 0 mod ℓ, so the aggregate c1 is
+ * the identity and the aggregate c2 is sum(bits)·g (the identity for sum 0).
+ */
+export function zeroRandomnessVector(pk: Uint8Array, bits: readonly (0 | 1)[]): EncryptedVector {
+  const v = encryptVectorWith(pk, bits, zeroSumScalars(bits.length))
+  if (!isZero(v.rSum) || !isZero(v.agg.c1)) throw new Error('aggregate c1 is not the identity')
+  return v
+}
 
 // Scalar-mults that return the identity encoding where libsodium throws.
 function mulBaseOrIdentity(s: Uint8Array): Uint8Array {
@@ -35,9 +69,9 @@ function contextFields(ctx: ProofContext): Uint8Array[] {
 
 /**
  * The disjunctive proof built by hand, so that the simulated branch's
- * challenge `simE` and response `simZ` can be chosen. The provers draw them at
- * random and cannot multiply by a zero scalar or the identity. Branch m is real
- * (witness r); branch 1 − m is simulated.
+ * challenge `simE` and response `simZ` can be chosen (the provers draw them at
+ * random), and so that a verifier can be tested apart from the prover. Branch m
+ * is real (witness r); branch 1 − m is simulated.
  */
 export function handBuiltDisjunctive(
   domain: string, ctx: ProofContext, pk: Uint8Array, ct: Ciphertext,
@@ -70,13 +104,6 @@ export function zeroRandomnessSumOne(ctx: ProofContext, pk: Uint8Array): {
   rSum: Uint8Array
   proof: SumOneProof
 } {
-  const sodium = getSodium()
-  const r1 = randomScalar()
-  const r2 = randomScalar()
-  const r3 = sodium.crypto_core_ristretto255_scalar_negate(sodium.crypto_core_ristretto255_scalar_add(r1, r2))
-  const cts = [encryptWithRandomness(0, r1, pk), encryptWithRandomness(1, r2, pk), encryptWithRandomness(0, r3, pk)]
-  const rSum = sodium.crypto_core_ristretto255_scalar_add(sodium.crypto_core_ristretto255_scalar_add(r1, r2), r3)
-  if (!isZero(rSum)) throw new Error('randomness does not sum to 0')
-  if (!isZero(homomorphicSum(cts)?.c1 ?? ONE)) throw new Error('aggregate c1 is not the identity')
+  const { cts, rSum } = zeroRandomnessVector(pk, [0, 1, 0])
   return { cts, rSum, proof: proveSumOne(ctx, cts, rSum, pk) }
 }

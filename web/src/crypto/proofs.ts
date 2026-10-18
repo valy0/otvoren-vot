@@ -56,6 +56,15 @@ function requireContext(ctx: ProofContext): Uint8Array[] {
   return encodeContext(ctx)
 }
 
+/**
+ * Prover side: throws unless `pubKey` is a wire point. Go's provers refuse a
+ * nil or identity key with ErrMalformed; the provers' scalar-mults are
+ * identity-tolerant, so the refusal has to be explicit here.
+ */
+function requirePublicKey(domain: string, pubKey: Uint8Array): void {
+  if (!isPoint(pubKey)) throw new Error(`${domain}: public key is not a valid non-identity point`)
+}
+
 /** Verifier side: the encoded context, or null for an unusable one. */
 function contextOrNull(ctx: ProofContext): Uint8Array[] | null {
   return contextProblem(ctx) === null ? encodeContext(ctx) : null
@@ -166,9 +175,12 @@ export function proveCandidateSum(
   return proveDisjunctive(CANDIDATE_SUM_DOMAIN, requireContext(ctx), sum, rSum, pubKey, aggCt)
 }
 
-/** Verifies a candidate-sum proof under `ctx`. Never throws. */
+/**
+ * Verifies a candidate-sum proof under `ctx`. Never throws. `aggCt` is a
+ * homomorphic sum, so either half may be the identity (see isAggregate).
+ */
 export function verifyCandidateSum(ctx: ProofContext, pubKey: Uint8Array, aggCt: Ciphertext, p: BinaryProof): boolean {
-  return verifyDisjunctive(CANDIDATE_SUM_DOMAIN, ctx, pubKey, aggCt, p)
+  return verifyDisjunctive(CANDIDATE_SUM_DOMAIN, ctx, pubKey, aggCt, p, isAggregate)
 }
 
 /**
@@ -190,7 +202,9 @@ export function proveConsistency(
 
 /**
  * Verifies a consistency proof under `ctx`. The difference ciphertext is
- * recomputed from `partyCt` and `candSumCt`. Never throws.
+ * recomputed from `partyCt` and `candSumCt`. Never throws. `partyCt` is a
+ * wire ciphertext; `candSumCt` is a homomorphic sum, so either half may be the
+ * identity (see isAggregate).
  */
 export function verifyConsistency(
   ctx: ProofContext,
@@ -202,7 +216,7 @@ export function verifyConsistency(
   try {
     const context = contextOrNull(ctx)
     if (context === null) return false
-    if (!isPoint(pubKey) || !isCiphertext(partyCt) || !isCiphertext(candSumCt) || !isBinaryProof(p)) return false
+    if (!isPoint(pubKey) || !isCiphertext(partyCt) || !isAggregate(candSumCt) || !isBinaryProof(p)) return false
     return disjunctiveEquationsHold(CONSISTENCY_DOMAIN, context, pubKey, homomorphicSubtract(partyCt, candSumCt), p)
   } catch {
     return false
@@ -234,6 +248,7 @@ export function proveSumOne(
   pubKey: Uint8Array,
 ): SumOneProof {
   const context = requireContext(ctx)
+  requirePublicKey(SUM_DOMAIN, pubKey)
   const sodium = getSodium()
 
   const aggCt = homomorphicSum(cts)
@@ -315,6 +330,7 @@ function proveDisjunctive(
   pubKey: Uint8Array,
   ct: Ciphertext,
 ): BinaryProof {
+  requirePublicKey(domain, pubKey)
   if (messageBit === 0) return proveBinaryReal0(domain, context, r, pubKey, ct)
   if (messageBit === 1) return proveBinaryReal1(domain, context, r, pubKey, ct)
   throw new Error(`${domain}: claimed plaintext ${String(messageBit)} is not 0 or 1`)
@@ -326,11 +342,12 @@ function verifyDisjunctive(
   pubKey: Uint8Array,
   ct: Ciphertext,
   p: BinaryProof,
+  isStatement: (ct: Ciphertext) => boolean = isCiphertext,
 ): boolean {
   try {
     const context = contextOrNull(ctx)
     if (context === null) return false
-    if (!isPoint(pubKey) || !isCiphertext(ct) || !isBinaryProof(p)) return false
+    if (!isPoint(pubKey) || !isStatement(ct) || !isBinaryProof(p)) return false
     return disjunctiveEquationsHold(domain, context, pubKey, ct, p)
   } catch {
     return false
@@ -406,16 +423,17 @@ function proveBinaryReal0(domain: string, context: Uint8Array[], r: Uint8Array, 
   const e1 = sodium.crypto_core_ristretto255_scalar_random()
   const z1 = sodium.crypto_core_ristretto255_scalar_random()
 
-  // a1 = g^z1 - c1^e1
+  // a1 = g^z1 - c1^e1. The statement points may be the identity (c1 of an
+  // aggregate or a difference), so these scalar-mults go through `mul`.
   const gz1 = sodium.crypto_scalarmult_ristretto255_base(z1)
-  const c1e1 = sodium.crypto_scalarmult_ristretto255(e1, ct.c1)
+  const c1e1 = mul(e1, ct.c1)
   const a1 = sodium.crypto_core_ristretto255_sub(gz1, c1e1)
 
   // b1 = h^z1 - (c2 - g)^e1   [branch 1 assumes m=1, so c2 - g = h^r]
-  const hz1 = sodium.crypto_scalarmult_ristretto255(z1, h)
+  const hz1 = mul(z1, h)
   const g = generatorPoint()
   const c2MinusG = sodium.crypto_core_ristretto255_sub(ct.c2, g)
-  const c2ge1 = sodium.crypto_scalarmult_ristretto255(e1, c2MinusG)
+  const c2ge1 = mul(e1, c2MinusG)
   const b1 = sodium.crypto_core_ristretto255_sub(hz1, c2ge1)
 
   // Challenge
@@ -443,14 +461,15 @@ function proveBinaryReal1(domain: string, context: Uint8Array[], r: Uint8Array, 
   const e0 = sodium.crypto_core_ristretto255_scalar_random()
   const z0 = sodium.crypto_core_ristretto255_scalar_random()
 
-  // a0 = g^z0 - c1^e0
+  // a0 = g^z0 - c1^e0. The statement points may be the identity (c1 of an
+  // aggregate or a difference), so these scalar-mults go through `mul`.
   const gz0 = sodium.crypto_scalarmult_ristretto255_base(z0)
-  const c1e0 = sodium.crypto_scalarmult_ristretto255(e0, ct.c1)
+  const c1e0 = mul(e0, ct.c1)
   const a0 = sodium.crypto_core_ristretto255_sub(gz0, c1e0)
 
   // b0 = h^z0 - c2^e0   [branch 0 assumes m=0, so c2 = h^r directly]
-  const hz0 = sodium.crypto_scalarmult_ristretto255(z0, h)
-  const c2e0 = sodium.crypto_scalarmult_ristretto255(e0, ct.c2)
+  const hz0 = mul(z0, h)
+  const c2e0 = mul(e0, ct.c2)
   const b0 = sodium.crypto_core_ristretto255_sub(hz0, c2e0)
 
   // Real branch 1
@@ -488,7 +507,7 @@ function homomorphicSubtract(a: Ciphertext, b: Ciphertext): Ciphertext {
 }
 
 // ---------------------------------------------------------------------------
-// Verifier arithmetic with Go's identity semantics
+// Verifier and prover arithmetic with Go's identity semantics
 // ---------------------------------------------------------------------------
 
 // libsodium's crypto_scalarmult_ristretto255(_base) refuses an identity result
@@ -497,7 +516,8 @@ function homomorphicSubtract(a: Ciphertext, b: Ciphertext): Ciphertext {
 // encoding (32 zero bytes), so only the scalar-mults need wrapping. In this
 // prime-order group s·P is the identity exactly when s ≡ 0 (mod ℓ) or P is the
 // identity. Every scalar reaching these helpers is canonical (validated wire
-// scalars, or reduced challenges), so s ≡ 0 is exactly 32 zero bytes.
+// scalars, reduced challenges, or the provers' crypto_core_ristretto255_scalar_random
+// output), so s ≡ 0 is exactly 32 zero bytes.
 
 /** s·P, returning the identity encoding where libsodium would throw. */
 function mul(s: Uint8Array, point: Uint8Array): Uint8Array {
@@ -541,8 +561,28 @@ function isCanonicalScalar(x: unknown): boolean {
   return bytesEqual(getSodium().crypto_core_ristretto255_scalar_reduce(wide), x)
 }
 
+/**
+ * A 32-byte canonical Ristretto255 encoding, the identity (32 zero bytes)
+ * included. Only for values the verifier derives, never for wire fields.
+ */
+function isPointOrIdentity(x: unknown): boolean {
+  if (!isBytes32(x)) return false
+  return isAllZero(x) || getSodium().crypto_core_ristretto255_is_valid_point(x)
+}
+
+/** A wire ciphertext: both halves are wire points (isPoint). */
 function isCiphertext(ct: Ciphertext): boolean {
   return isPoint(ct.c1) && isPoint(ct.c2)
+}
+
+/**
+ * A ciphertext the verifier derives as a homomorphic sum (aggCt, candSumCt),
+ * never a wire field. Randomness that sums to 0 mod ℓ makes c1 the identity
+ * (and c2 too when the plaintext sum is 0); Go's VerifyCandidateSum and
+ * VerifyConsistency only nil-check these, so the identity is allowed here.
+ */
+function isAggregate(ct: Ciphertext): boolean {
+  return isPointOrIdentity(ct.c1) && isPointOrIdentity(ct.c2)
 }
 
 function isBinaryProof(p: BinaryProof): boolean {

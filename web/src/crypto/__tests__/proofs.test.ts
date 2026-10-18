@@ -14,7 +14,8 @@ import {
 } from '../proofs'
 
 import {
-  BINARY_DOMAIN, CONSISTENCY_DOMAIN, ZERO, handBuiltDisjunctive, isZero, randomScalar, zeroRandomnessSumOne,
+  BINARY_DOMAIN, CANDIDATE_SUM_DOMAIN, ZERO, handBuiltDisjunctive, isZero, randomScalar,
+  zeroRandomnessSumOne, zeroRandomnessVector,
 } from './identityEdges'
 
 beforeAll(async () => {
@@ -428,14 +429,24 @@ describe('malformed input', () => {
     expectFalseWithoutThrowing(() => verifySumOne(ctx, pk, [], proof))
   })
 
-  it('verifyCandidateSum and verifyConsistency return false for a 31-byte field or a zero point', () => {
+  it('verifyCandidateSum and verifyConsistency return false for a 31-byte field or a zero wire point', () => {
     const { pk, ct, proof } = validBinary()
     const short = ct.c2.slice(0, 31)
     expectFalseWithoutThrowing(() => verifyCandidateSum(ctx, pk, { ...ct, c2: short }, proof))
     expectFalseWithoutThrowing(() => verifyCandidateSum(ctx, pk, ct, { ...proof, z1: proof.z1.slice(0, 31) }))
     expectFalseWithoutThrowing(() => verifyConsistency(ctx, pk, { ...ct, c1: short }, ct, proof))
-    expectFalseWithoutThrowing(() => verifyConsistency(ctx, pk, ct, { ...ct, c1: new Uint8Array(32) }, proof))
+    // partyCt is a wire ciphertext: the identity is malformed there.
+    expectFalseWithoutThrowing(() => verifyConsistency(ctx, pk, { ...ct, c1: new Uint8Array(32) }, ct, proof))
     expectFalseWithoutThrowing(() => verifyConsistency(ctx, new Uint8Array(32), ct, ct, proof))
+  })
+
+  it('verifyCandidateSum and verifyConsistency return false for an aggregate that is not a canonical encoding', () => {
+    const { pk, ct, proof } = validBinary()
+    const invalid = new Uint8Array(32).fill(0xff)
+    expectFalseWithoutThrowing(() => verifyCandidateSum(ctx, pk, { ...ct, c1: invalid }, proof))
+    expectFalseWithoutThrowing(() => verifyCandidateSum(ctx, pk, { ...ct, c2: ct.c2.slice(0, 31) }, proof))
+    expectFalseWithoutThrowing(() => verifyConsistency(ctx, pk, ct, { ...ct, c2: invalid }, proof))
+    expectFalseWithoutThrowing(() => verifyConsistency(ctx, pk, ct, { ...ct, c1: new Uint8Array(33) }, proof))
   })
 
   it('provers throw on an empty ID or an index outside uint32', () => {
@@ -495,11 +506,38 @@ describe('identity intermediates (accepted, as in Go)', () => {
     expect(verifySumOne(CTX, pk, cts, proof)).toBe(true)
   })
 
+  // aggCt and candSumCt are homomorphic sums the verifier derives, not wire
+  // fields: randomness that sums to 0 mod ℓ makes them the identity, and Go's
+  // verifiers accept them. These proofs are built by hand so that only the
+  // verifier is under test.
+  for (const sum of [0, 1] as const) {
+    it(`verifyCandidateSum accepts candidate randomness summing to 0 (aggregate c1 is the identity), sum=${sum}`, () => {
+      const { pk } = makeKeyPair()
+      const { agg, rSum } = zeroRandomnessVector(pk, sum === 1 ? [0, 1, 0] : [0, 0, 0])
+      expect(isZero(agg.c2)).toBe(sum === 0)
+      const proof = handBuiltDisjunctive(CANDIDATE_SUM_DOMAIN, CTX, pk, agg, sum, rSum, randomScalar(), randomScalar())
+      expect(verifyCandidateSum(CTX, pk, agg, proof)).toBe(true)
+      expect(verifyCandidateSum(ctxAt(1), pk, agg, proof)).toBe(false)
+    })
+  }
+
+  it('verifyConsistency accepts a candidate sum whose c1 is the identity (R_cand = 0)', () => {
+    const sodium = getSodium()
+    const { pk } = makeKeyPair()
+    const cand = zeroRandomnessVector(pk, [0, 1, 0])
+    const rParty = randomScalar()
+    const partyCt = encryptWithRandomness(1, rParty, pk)
+    const rDiff = sodium.crypto_core_ristretto255_scalar_sub(rParty, cand.rSum)
+    const proof = proveConsistency(CTX, 0, rDiff, pk, partyCt, cand.agg)
+    expect(verifyConsistency(CTX, pk, partyCt, cand.agg, proof)).toBe(true)
+    expect(verifyConsistency(ctxAt(1), pk, partyCt, cand.agg, proof)).toBe(false)
+  })
+
   for (const { party, cands, diff } of [
     { party: 1, cands: [0, 1, 0], diff: 0 },
     { party: 1, cands: [0, 0, 0], diff: 1 },
   ] as const) {
-    it(`verifyConsistency accepts r_party = R_cand (difference c1 is the identity), diff=${diff}`, () => {
+    it(`proveConsistency proves r_party = R_cand (difference c1 is the identity), diff=${diff}`, () => {
       const sodium = getSodium()
       const { pk } = makeKeyPair()
       const rs = cands.map(() => randomScalar())
@@ -514,10 +552,35 @@ describe('identity intermediates (accepted, as in Go)', () => {
       }
       expect(isZero(diffCt.c1)).toBe(true)
 
-      // rDiff = r_party − R_cand = 0. proveConsistency cannot build this one: its
-      // simulated branch multiplies by the identity c1, which libsodium refuses.
-      const proof = handBuiltDisjunctive(CONSISTENCY_DOMAIN, CTX, pk, diffCt, diff, ZERO, randomScalar(), randomScalar())
+      // rDiff = r_party − R_cand = 0. The simulated branch multiplies by the
+      // identity c1; the prover must carry on with the identity, as Go's does.
+      const rDiff = sodium.crypto_core_ristretto255_scalar_sub(rCand, rCand)
+      const proof = proveConsistency(CTX, diff, rDiff, pk, partyCt, agg)
       expect(verifyConsistency(CTX, pk, partyCt, agg, proof)).toBe(true)
+      expect(verifyConsistency(ctxAt(1), pk, partyCt, agg, proof)).toBe(false)
     })
   }
+
+  for (const sum of [0, 1] as const) {
+    it(`proveCandidateSum proves candidate randomness summing to 0 (aggregate c1 is the identity), sum=${sum}`, () => {
+      const { pk } = makeKeyPair()
+      const { agg, rSum } = zeroRandomnessVector(pk, sum === 1 ? [0, 1, 0] : [0, 0, 0])
+      const proof = proveCandidateSum(CTX, sum, rSum, pk, agg)
+      expect(verifyCandidateSum(CTX, pk, agg, proof)).toBe(true)
+      expect(verifyCandidateSum(ctxAt(1), pk, agg, proof)).toBe(false)
+    })
+  }
+
+  it('provers throw on an identity, invalid or short public key, as Go refuses one', () => {
+    const { pk } = makeKeyPair()
+    const { ciphertext, randomness } = encrypt(1, pk)
+    for (const bad of [new Uint8Array(32), new Uint8Array(32).fill(0xff), pk.slice(0, 31)]) {
+      for (const bit of [0, 1] as const) {
+        expect(() => proveBinary(CTX, bit, randomness, bad, ciphertext)).toThrow()
+        expect(() => proveCandidateSum(CTX, bit, randomness, bad, ciphertext)).toThrow()
+        expect(() => proveConsistency(CTX, bit, randomness, bad, ciphertext, ciphertext)).toThrow()
+      }
+      expect(() => proveSumOne(CTX, [ciphertext], randomness, bad)).toThrow()
+    }
+  })
 })
