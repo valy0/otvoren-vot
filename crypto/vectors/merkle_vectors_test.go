@@ -190,7 +190,9 @@ func buildMerkleVectors(t testing.TB) MerkleVectors {
 			ProofHex: hxs(p), RootHex: hx(r),
 		})
 	}
-	ii("index_equals_size", leaf(5), 8, 8, p58, root(8))
+	// Built from the (0, 8) entry: without the index >= size rule the walk
+	// treats index 8 like index 0 and reaches root(8).
+	ii("index_equals_size", leaf(0), 8, 8, incl(0, 8), root(8))
 	ii("size_zero", leaf(0), 0, 0, nil, root(0))
 	ii("relabelled_index", leaf(2), 0, 1000, p23, root(3))
 	ii("truncated_proof", leaf(5), 5, 8, p58[:len(p58)-1], root(8))
@@ -340,6 +342,14 @@ func TestVerifyMerkleVectors(t *testing.T) {
 		if err := merkle.VerifyConsistency(e.Size1, e.Size2, decodeHash(t, e.Root1Hex),
 			decodeHash(t, e.Root2Hex), decodeHashes(t, e.ProofHex)); err != nil {
 			t.Errorf("consistency (%d, %d): %v", e.Size1, e.Size2, err)
+		}
+		for _, c := range []struct {
+			size uint64
+			hex  string
+		}{{e.Size1, e.Root1Hex}, {e.Size2, e.Root2Hex}} {
+			if got, err := tree.RootAt(c.size); err != nil || hx(got) != c.hex {
+				t.Errorf("consistency (%d, %d): root at %d does not match the tree", e.Size1, e.Size2, c.size)
+			}
 		}
 	}
 
