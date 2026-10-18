@@ -234,7 +234,7 @@ The system's end-to-end verifiability and ballot secrecy rest on the following c
 |-----------|-----------|-------------------|
 | ElGamal / Sigma proofs | DLog on Ristretto255 | ~126 bits |
 | Groth16 SNARK | KEA on BN254 | ~100-110 bits |
-| Fiat-Shamir | Random oracle (SHA-512) | 256 bits (collision resistance, far above the ~126-bit group bound) |
+| Fiat-Shamir | Random oracle (SHA-512, reduced mod q) | ~126 bits (challenge space ~2^252; overall soundness capped by the group bound) |
 | Threshold scheme | DLog + honest majority (5 of 9 trustees) | Information-theoretic for secrecy; computational for verifiability |
 
 The weakest link is BN254 at ~100-110 bits. This is sufficient for election-duration security (the proofs need to withstand attack only until results are certified and publicly verified, typically days to weeks). Future versions may migrate to BLS12-381 (~120 bits) when gnark support matures, at the cost of larger field elements and slower proving.
