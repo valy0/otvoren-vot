@@ -391,6 +391,24 @@ describe('malformed input', () => {
     expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, ct, { ...proof, a1: proof.a1.slice(0, 31) }))
   })
 
+  it('verifyBinary returns false for a 33-byte point or scalar field', () => {
+    const { pk, ct, proof } = validBinary()
+    const grow = (x: Uint8Array) => { const out = new Uint8Array(33); out.set(x); return out }
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, ct, { ...proof, a0: grow(proof.a0) }))
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, ct, { ...proof, z1: grow(proof.z1) }))
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, { ...ct, c1: grow(ct.c1) }, proof))
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, grow(pk), ct, proof))
+  })
+
+  it('verifyBinary returns false for a non-zero 32-byte encoding that is not a valid point (32 × 0xff)', () => {
+    const { pk, ct, proof } = validBinary()
+    const invalid = new Uint8Array(32).fill(0xff)
+    expect(getSodium().crypto_core_ristretto255_is_valid_point(invalid)).toBe(false)
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, ct, { ...proof, b1: invalid }))
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, { ...ct, c2: invalid }, proof))
+    expectFalseWithoutThrowing(() => verifyBinary(ctx, invalid, ct, proof))
+  })
+
   it('verifyBinary returns false for an a0 of 32 zero bytes', () => {
     const { pk, ct, proof } = validBinary()
     expectFalseWithoutThrowing(() => verifyBinary(ctx, pk, ct, { ...proof, a0: new Uint8Array(32) }))
