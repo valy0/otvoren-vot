@@ -168,6 +168,7 @@ export default function VoteFlow() {
 
     const request: WorkerRequest = {
       type: 'encrypt-ballot',
+      electionId: config.electionId,
       electionPubKey: config.publicKey,
       partyIndex: state.choice.partyIndex,
       numParties: config.parties.length,

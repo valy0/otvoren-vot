@@ -20,24 +20,29 @@ export interface EncryptionResult {
  *   m=1: c2 = h^r + g
  */
 export function encrypt(messageBit: 0 | 1, pubKey: Uint8Array): EncryptionResult {
+  const r = getSodium().crypto_core_ristretto255_scalar_random()
+  return {
+    ciphertext: encryptWithRandomness(messageBit, r, pubKey),
+    randomness: r,
+  }
+}
+
+/**
+ * Encrypts a single bit (0 or 1) under the given public key with the caller's
+ * randomness `r`: c1 = g^r, c2 = h^r + g^m. Mirrors Go's
+ * elgamal.EncryptWithRandomness; used for deterministic test vectors.
+ */
+export function encryptWithRandomness(messageBit: 0 | 1, r: Uint8Array, pubKey: Uint8Array): Ciphertext {
   const sodium = getSodium()
-  const r = sodium.crypto_core_ristretto255_scalar_random()
   const c1 = sodium.crypto_scalarmult_ristretto255_base(r)
   const hr = sodium.crypto_scalarmult_ristretto255(r, pubKey)
 
-  let c2: Uint8Array
   if (messageBit === 0) {
-    c2 = hr
-  } else {
-    // g^1 = generator point
-    const g = sodium.crypto_scalarmult_ristretto255_base(scalarOne())
-    c2 = sodium.crypto_core_ristretto255_add(hr, g)
+    return { c1, c2: hr }
   }
-
-  return {
-    ciphertext: { c1, c2 },
-    randomness: r,
-  }
+  // g^1 = generator point
+  const g = sodium.crypto_scalarmult_ristretto255_base(scalarOne())
+  return { c1, c2: sodium.crypto_core_ristretto255_add(hr, g) }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { initSodium, getSodium } from './sodium'
 import { encrypt, serializeCiphertext, hexToBytes, bytesToHex } from './elgamal'
 import { proveBinary, proveSumOne } from './proofs'
-import type { BinaryProof, SumOneProof } from './proofs'
+import type { BinaryProof, ProofContext, SumOneProof } from './proofs'
 
 // ---------------------------------------------------------------------------
 // Message types
@@ -9,6 +9,7 @@ import type { BinaryProof, SumOneProof } from './proofs'
 
 export type WorkerRequest = {
   type: 'encrypt-ballot'
+  electionId: string      // election ID from the Bulletin Board; bound into every proof
   electionPubKey: string  // hex 64 chars (32 bytes Ristretto255 point)
   partyIndex: number      // 0..numParties (last = blank vote)
   numParties: number
@@ -106,6 +107,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     // Step 3: Generate a 256-bit ballot ID (32 random bytes, base64url encoded)
     const ballotIdBytes = sodium.randombytes_buf(32)
     const ballotId = toBase64Url(ballotIdBytes)
+    // Every proof is bound to (election, ballot, statement index); indices
+    // follow docs/protocol/ballot-proofs.md section 8.4.
+    const proofCtx = (index: number): ProofContext => ({ electionId: req.electionId, ballotId, index })
 
     // Step 4: Build the one-hot party vector and encrypt each element
     // partyIndex range is now 0..numParties (inclusive; last = blank vote)
@@ -119,9 +123,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       encrypt(i === partyIndex ? 1 : 0, pubKey)
     )
 
-    // Step 5: Generate binary proof for each party element
+    // Step 5: Generate binary proof for each party element (party slot i → index i)
     const binaryProofs = encResults.map((res, i) =>
-      proveBinary(i === partyIndex ? 1 : 0, res.randomness, pubKey, res.ciphertext)
+      proveBinary(proofCtx(i), i === partyIndex ? 1 : 0, res.randomness, pubKey, res.ciphertext)
     )
 
     // Step 6: Sum all randomness scalars, then generate sum=1 proof
@@ -132,7 +136,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
 
     const cts = encResults.map(r => r.ciphertext)
-    const sumProof = proveSumOne(cts, rSum, pubKey)
+    const sumProof = proveSumOne(proofCtx(0), cts, rSum, pubKey)  // party sum proof → index 0
 
     // Step 7: Zero all randomness scalars
     for (const r of randomnessScalars) {
@@ -162,9 +166,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         encrypt(i === activeSlot ? 1 : 0, pubKey)
       )
 
-      // Binary proofs for each candidate element
-      const candBinaryRaw = candEncResults.map((res, i) =>
-        proveBinary(i === activeSlot ? 1 : 0, res.randomness, pubKey, res.ciphertext)
+      // Binary proofs for each candidate element (j-th slot → index numParties + 1 + j)
+      const candBinaryRaw = candEncResults.map((res, j) =>
+        proveBinary(proofCtx(numParties + 1 + j), j === activeSlot ? 1 : 0, res.randomness, pubKey, res.ciphertext)
       )
 
       // Sum-one proof for candidate vector
@@ -174,7 +178,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         candRSum = sodium.crypto_core_ristretto255_scalar_add(candRSum, candRandomness[i])
       }
       const candCts = candEncResults.map(r => r.ciphertext)
-      const candSumProofRaw = proveSumOne(candCts, candRSum, pubKey)
+      const candSumProofRaw = proveSumOne(proofCtx(1), candCts, candRSum, pubKey)  // candidate sum-one proof → index 1
 
       // Zero randomness
       for (const r of candRandomness) { sodium.memzero(r) }
