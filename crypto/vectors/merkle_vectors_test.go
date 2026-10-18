@@ -493,7 +493,7 @@ func marshalMerkleVectors(t testing.TB) []byte {
 }
 
 // TestGenerateMerkleVectors writes testdata/merkle.json.
-// Run: go test ./vectors/ -run TestGenerateMerkleVectors -update
+// Run: cd crypto && go test ./vectors/ -run TestGenerateMerkleVectors -update
 func TestGenerateMerkleVectors(t *testing.T) {
 	if !*update {
 		t.Skip("run with -update to regenerate")
@@ -508,7 +508,7 @@ func TestGenerateMerkleVectors(t *testing.T) {
 func TestMerkleVectorsUpToDate(t *testing.T) {
 	have, err := os.ReadFile(merkleVectorsPath)
 	if err != nil {
-		t.Fatalf("%s not found; run: go test ./vectors/ -run TestGenerateMerkleVectors -update", merkleVectorsPath)
+		t.Fatalf("%s not found; run: cd crypto && go test ./vectors/ -run TestGenerateMerkleVectors -update", merkleVectorsPath)
 	}
 	if !bytes.Equal(have, marshalMerkleVectors(t)) {
 		t.Fatalf("%s is stale; regenerate with: cd crypto && go test ./vectors/ -run TestGenerateMerkleVectors -update", merkleVectorsPath)
@@ -539,7 +539,7 @@ func decodeHashes(t *testing.T, ss []string) []merkle.Hash {
 func TestVerifyMerkleVectors(t *testing.T) {
 	data, err := os.ReadFile(merkleVectorsPath)
 	if err != nil {
-		t.Fatalf("%s not found; run: go test ./vectors/ -run TestGenerateMerkleVectors -update", merkleVectorsPath)
+		t.Fatalf("%s not found; run: cd crypto && go test ./vectors/ -run TestGenerateMerkleVectors -update", merkleVectorsPath)
 	}
 	var v MerkleVectors
 	if err := json.Unmarshal(data, &v); err != nil {

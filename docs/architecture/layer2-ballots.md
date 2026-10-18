@@ -105,7 +105,7 @@ Each monitor independently stores the sequence of signed roots as they arrive. M
 
 ### 2.3 Consistency Verification
 
-[RFC 9162](../protocol/merkle.md) consistency proofs allow any monitor to verify that each new root is a consistent forward extension of the previous root — i.e., no previously appended entry has been modified or removed.
+RFC 9162 consistency proofs ([merkle.md](../protocol/merkle.md)) allow any monitor to verify that each new root is a consistent forward extension of the previous root — i.e., no previously appended entry has been modified or removed.
 
 A monitor verifies consistency between root at time T1 (with N1 ballots) and root at time T2 (with N2 > N1 ballots) by:
 1. Requesting a consistency proof from `GET /api/v1/board/consistency?from={N1}&to={N2}`
