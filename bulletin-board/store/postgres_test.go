@@ -4,23 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
-)
 
-func testDatabaseURL() string {
-	if url := os.Getenv("TEST_DATABASE_URL"); url != "" {
-		return url
-	}
-	return "postgres://board:dev@localhost:5432/bulletin_board?sslmode=disable"
-}
+	"github.com/valy0/otvoren-vot/bulletin-board/internal/testdb"
+)
 
 func setupStore(t *testing.T) *Store {
 	t.Helper()
 	ctx := context.Background()
-	s, err := New(ctx, testDatabaseURL(), 25, 5)
+	s, err := New(ctx, testdb.URL(), 25, 5)
 	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
+		testdb.Unavailable(t, err)
 	}
 	if err := s.RunMigrations(ctx); err != nil {
 		t.Fatalf("migrations failed: %v", err)
