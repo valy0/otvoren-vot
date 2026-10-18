@@ -55,6 +55,26 @@ var refInclusion = []struct {
 	}},
 }
 
+// refConsistency pins consistency proofs over the reference leaves, in RFC
+// 9162 PROOF order: the deepest subtree first.
+var refConsistency = []struct {
+	size1, size2 uint64
+	proof        []string
+}{
+	{6, 8, []string{
+		"0ebc5d3437fbe2db158b9f126a1d118e308181031d0a949f8dededebc558ef6a",
+		"ca854ea128ed050b41b35ffc1b87b8eb2bde461e9e3b5596ece6b9d5975a0ae0",
+		"d37ee418976dd95753c1c73862b9398fa2a2cf9b4ff0fdfe8b30cd95209614b7",
+	}},
+	{2, 5, []string{
+		"5f083f0a1a33ca076a95279832580db3e0ef4584bdff1f54c8a360f50de3031e",
+		"bc1a0643b12e4d2d7c77918f44e0f4f79a838b6cf9ec5b5c283e1f4d88599e6b",
+	}},
+	{4, 8, []string{
+		"6b47aaf29ee3c2af9af889bc1fb9254dabd31177f16232dd6aab035ca39bf6e4",
+	}},
+}
+
 // refLeaves decodes refLeavesHex.
 func refLeaves(t testing.TB) [][]byte {
 	t.Helper()
@@ -311,6 +331,187 @@ func TestProofRequestsOutOfRange(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.call(); !errors.Is(err, tc.want) {
 				t.Fatalf("error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestReferenceConsistencyProofs(t *testing.T) {
+	tree := buildTree(refLeaves(t))
+	for _, tc := range refConsistency {
+		want := mustHashes(t, tc.proof)
+		got, err := tree.ConsistencyProof(tc.size1, tc.size2)
+		if err != nil {
+			t.Fatalf("ConsistencyProof(%d, %d): %v", tc.size1, tc.size2, err)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("ConsistencyProof(%d, %d) = %x, want %x", tc.size1, tc.size2, got, want)
+		}
+		root1, root2 := refRoot(t, int(tc.size1)), refRoot(t, int(tc.size2))
+		if err := VerifyConsistency(tc.size1, tc.size2, root1, root2, got); err != nil {
+			t.Fatalf("VerifyConsistency(%d, %d): %v", tc.size1, tc.size2, err)
+		}
+	}
+}
+
+func TestConsistencyMatchesReference(t *testing.T) {
+	leaves := leaves64()
+	tree := buildTree(leaves)
+	roots := make([][32]byte, len(leaves)+1)
+	for n := range roots {
+		roots[n] = refMTH(leaves[:n])
+	}
+	for n := 2; n <= len(leaves); n++ {
+		for m := 1; m < n; m++ {
+			proof, err := tree.ConsistencyProof(uint64(m), uint64(n))
+			if err != nil {
+				t.Fatalf("ConsistencyProof(%d, %d): %v", m, n, err)
+			}
+			if want := refSubproof(m, leaves[:n], true); !sameHashes(proof, want) {
+				t.Fatalf("ConsistencyProof(%d, %d) = %x, want %x", m, n, proof, want)
+			}
+			if err := VerifyConsistency(uint64(m), uint64(n), roots[m], roots[n], proof); err != nil {
+				t.Fatalf("VerifyConsistency(%d, %d): %v", m, n, err)
+			}
+		}
+	}
+}
+
+// TestConsistencyEdgeSizes covers the conventions of merkle.md §4 that lie
+// outside the RFC's 0 < size1 < size2: there is nothing to prove, so the
+// proof is empty.
+func TestConsistencyEdgeSizes(t *testing.T) {
+	tree := buildTree(refLeaves(t))
+	empty := EmptyRoot()
+	for n := range tree.Size() + 1 {
+		root := refRoot(t, int(n))
+		for _, tc := range []struct {
+			size1 uint64
+			root1 Hash
+		}{{0, empty}, {n, root}} {
+			proof, err := tree.ConsistencyProof(tc.size1, n)
+			if err != nil {
+				t.Fatalf("ConsistencyProof(%d, %d): %v", tc.size1, n, err)
+			}
+			if len(proof) != 0 {
+				t.Fatalf("ConsistencyProof(%d, %d) = %x, want an empty proof", tc.size1, n, proof)
+			}
+			if err := VerifyConsistency(tc.size1, n, tc.root1, root, proof); err != nil {
+				t.Fatalf("VerifyConsistency(%d, %d): %v", tc.size1, n, err)
+			}
+		}
+	}
+
+	proof, err := New().ConsistencyProof(0, 0)
+	if err != nil || len(proof) != 0 {
+		t.Fatalf("empty tree: ConsistencyProof(0, 0) = %x, %v; want an empty proof", proof, err)
+	}
+	if err := VerifyConsistency(0, 0, empty, empty, nil); err != nil {
+		t.Fatalf("VerifyConsistency(0, 0) with empty roots: %v", err)
+	}
+}
+
+func TestVerifyConsistencyRejects(t *testing.T) {
+	leaves := refLeaves(t)
+	tree := buildTree(leaves)
+	proof := func(size1, size2 uint64) []Hash {
+		t.Helper()
+		p, err := tree.ConsistencyProof(size1, size2)
+		if err != nil {
+			t.Fatalf("ConsistencyProof(%d, %d): %v", size1, size2, err)
+		}
+		return p
+	}
+	root := func(n int) Hash { return refRoot(t, n) }
+
+	// rewritten is the reference tree with leaf 1 changed: a history the
+	// board rewrote.
+	rewrittenLeaves := slices.Clone(leaves)
+	rewrittenLeaves[1] = []byte{0x01}
+	rewritten := buildTree(rewrittenLeaves)
+	rewrittenRoot := func(n uint64) Hash {
+		t.Helper()
+		r, err := rewritten.RootAt(n)
+		if err != nil {
+			t.Fatalf("rewritten RootAt(%d): %v", n, err)
+		}
+		return r
+	}
+
+	p68, p78, p12 := proof(6, 8), proof(7, 8), proof(1, 2)
+
+	cases := []struct {
+		name         string
+		size1, size2 uint64
+		root1, root2 Hash
+		proof        []Hash
+		want         error
+	}{
+		{"size1 > size2", 8, 6, root(8), root(6), p68, ErrSizeOutOfRange},
+		// Only the size1 > size2 rule rejects this: the RFC walk alone
+		// accepts it (fn = 2, sn = 0, and the one hash is both heads).
+		{"(3 → 1) that the RFC walk alone accepts", 3, 1, root(1), root(1), []Hash{root(1)}, ErrSizeOutOfRange},
+		{"size1 == size2 with a non-empty proof", 8, 8, root(8), root(8), []Hash{root(8)}, ErrInvalidProof},
+		{"size1 == size2 with different roots", 8, 8, root(8), root(7), nil, ErrInvalidProof},
+		{"(0 → 0) with root2 ≠ EmptyRoot()", 0, 0, root(0), root(1), nil, ErrInvalidProof},
+		{"size1 == 0 with a non-empty proof", 0, 8, root(0), root(8), []Hash{root(8)}, ErrInvalidProof},
+		{"size1 == 0 with root1 ≠ EmptyRoot()", 0, 8, root(1), root(8), nil, ErrInvalidProof},
+		// Only step 1 (empty proof) rejects this; without it there is no
+		// first proof hash to start the walk from.
+		{"(6 → 8) with an empty proof", 6, 8, root(6), root(8), nil, ErrInvalidProof},
+		{"(6 → 8) proof truncated by one", 6, 8, root(6), root(8), p68[:len(p68)-1], ErrInvalidProof},
+		{"(6 → 8) proof with one extra hash", 6, 8, root(6), root(8), append(slices.Clone(p68), LeafHash(leaves[0])), ErrInvalidProof},
+		{"roots swapped", 6, 8, root(8), root(6), p68, ErrInvalidProof},
+		{"root1 from a tree whose leaf 1 was changed", 6, 8, rewrittenRoot(6), root(8), p68, ErrInvalidProof},
+		// Only the final sr == root2 check rejects this.
+		{"root2 from a tree whose leaf 1 was changed", 6, 8, root(6), rewrittenRoot(8), p68, ErrInvalidProof},
+		// Only the step-6a rule (sn reaches 0 with proof left) rejects this:
+		// the last hash would otherwise climb both heads to sizes 7 and 8.
+		{"(7 → 8) proof offered as (3 → 4)", 3, 4, root(7), root(8), p78, ErrInvalidProof},
+		// Only the final sn == 0 check rejects this: the walk ends on the
+		// heads of sizes 6 and 8 with sn = 1.
+		{"(6 → 8) proof offered as (6 → 9)", 6, 9, root(6), root(8), p68, ErrInvalidProof},
+		{"(1 → 2) proof offered as (2^32+1 → 2^32+2)", 1<<32 + 1, 1<<32 + 2, root(1), root(2), p12, ErrInvalidProof},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := VerifyConsistency(tc.size1, tc.size2, tc.root1, tc.root2, tc.proof)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("VerifyConsistency error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+
+	t.Run("size1 2^63 to size2 MaxUint64", func(t *testing.T) {
+		start := time.Now()
+		err := VerifyConsistency(1<<63, math.MaxUint64, root(6), root(8), p68)
+		elapsed := time.Since(start)
+		if !errors.Is(err, ErrInvalidProof) {
+			t.Fatalf("VerifyConsistency error = %v, want %v", err, ErrInvalidProof)
+		}
+		if budget := 10 * time.Millisecond; elapsed > budget {
+			t.Fatalf("VerifyConsistency took %v, budget %v", elapsed, budget)
+		}
+	})
+}
+
+func TestConsistencyRequestsOutOfRange(t *testing.T) {
+	tree := buildTree(refLeaves(t))
+	n := tree.Size()
+	cases := []struct {
+		name         string
+		size1, size2 uint64
+	}{
+		{"ConsistencyProof(1, Size()+1)", 1, n + 1},
+		{"ConsistencyProof(3, 2)", 3, 2},
+		{"ConsistencyProof(Size(), Size()-1)", n, n - 1},
+		{"ConsistencyProof(0, MaxUint64)", 0, math.MaxUint64},
+		{"ConsistencyProof(MaxUint64, MaxUint64)", math.MaxUint64, math.MaxUint64},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := tree.ConsistencyProof(tc.size1, tc.size2); !errors.Is(err, ErrSizeOutOfRange) {
+				t.Fatalf("error = %v, want %v", err, ErrSizeOutOfRange)
 			}
 		})
 	}

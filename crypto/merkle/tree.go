@@ -6,8 +6,9 @@ import "math/bits"
 //
 // It stores hashes only, never leaf data: every complete subtree of 2^L
 // leaves aligned on a multiple of 2^L is kept, once, in levels. Append
-// costs O(log n) hashes; Root, RootAt and InclusionProof rebuild the
-// incomplete right edge from the stored subtrees in O(log n) hashes.
+// costs O(log n) hashes; Root, RootAt, InclusionProof and ConsistencyProof
+// rebuild the incomplete right edge from the stored subtrees in O(log n)
+// hashes.
 //
 // A Tree is not safe for concurrent use. Callers that share one must
 // serialise access to it.
@@ -98,6 +99,54 @@ func (t *Tree) path(m, lo, hi uint64, proof []Hash) []Hash {
 		return append(proof, t.hashRange(lo+k, hi))
 	}
 	proof = t.path(m-k, lo+k, hi, proof)
+	return append(proof, t.hashRange(lo, lo+k))
+}
+
+// ConsistencyProof returns PROOF(size1, D[0:size2]) (RFC 9162 §2.1.4.1), the
+// proof that the tree of the first size1 leaves is a prefix of the tree of
+// the first size2, with the hash of the deepest subtree first.
+//
+// It returns ErrSizeOutOfRange if size2 > Size() or size1 > size2. The RFC
+// defines PROOF for 0 < size1 < size2 only; for size1 == 0 or size1 == size2
+// there is nothing to prove, and the proof is empty (and non-nil), as
+// docs/protocol/merkle.md §4 specifies.
+func (t *Tree) ConsistencyProof(size1, size2 uint64) ([]Hash, error) {
+	if size2 > t.Size() || size1 > size2 {
+		return nil, ErrSizeOutOfRange
+	}
+	if size1 == 0 || size1 == size2 {
+		return []Hash{}, nil
+	}
+	// The proof has at most ceil(log2(size2)) + 1 hashes (RFC 9162 §2.1.4.1).
+	proof := make([]Hash, 0, bits.Len64(size2-1)+1)
+	return t.subproof(size1, 0, size2, true, proof), nil
+}
+
+// subproof appends SUBPROOF(m, D[lo:hi], b) (RFC 9162 §2.1.4.1) to proof and
+// returns it, for 0 < m <= hi-lo. b is true while the recursion has only
+// gone left, so D[lo:lo+m] is still the whole of D[0:size1]: if it is a
+// complete subtree, the verifier already holds its head, root1.
+//
+// It visits the same ranges as MTH(D[0:size2]), so every range it hashes
+// meets hashRange's precondition.
+func (t *Tree) subproof(m, lo, hi uint64, b bool, proof []Hash) []Hash {
+	n := hi - lo
+	if m == n {
+		if b {
+			return proof
+		}
+		return append(proof, t.hashRange(lo, hi))
+	}
+	k := splitPoint(n)
+	if m <= k {
+		// D[lo+k:hi] exists only in the larger tree: prove the left
+		// subtree and commit to the right one.
+		proof = t.subproof(m, lo, lo+k, b, proof)
+		return append(proof, t.hashRange(lo+k, hi))
+	}
+	// D[lo:lo+k] is the same in both trees: prove the right subtree and
+	// commit to the left one.
+	proof = t.subproof(m-k, lo+k, hi, false, proof)
 	return append(proof, t.hashRange(lo, lo+k))
 }
 

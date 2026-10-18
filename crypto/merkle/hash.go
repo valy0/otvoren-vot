@@ -22,12 +22,14 @@ var (
 	ErrIndexOutOfRange = errors.New("merkle: leaf index out of range")
 
 	// ErrSizeOutOfRange reports a tree size the tree has not reached, so
-	// there is no D[0:size] to compute a head or proof from (RFC 9162 §2.1.1).
+	// there is no D[0:size] to compute a head or proof from (RFC 9162 §2.1.1),
+	// or a consistency proof asked for or offered from a larger tree to a
+	// smaller one (docs/protocol/merkle.md §4).
 	ErrSizeOutOfRange = errors.New("merkle: tree size out of range")
 
 	// ErrInvalidProof reports a proof that fails verification: it has the
-	// wrong length for its index and size, or it does not hash to the
-	// expected root (RFC 9162 §2.1.3.2).
+	// wrong length for its index and size, or for its two sizes, or it does
+	// not hash to the expected root or roots (RFC 9162 §2.1.3.2, §2.1.4.2).
 	ErrInvalidProof = errors.New("merkle: invalid proof")
 )
 
