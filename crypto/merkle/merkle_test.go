@@ -243,6 +243,9 @@ func TestVerifyInclusionRejects(t *testing.T) {
 		{"(2, 3) proof offered as (0, 1000)", leaf(2), 0, 1000, p23, root(3), ErrInvalidProof},
 		{"(5, 8) proof truncated by one", leaf(5), 5, 8, p58[:len(p58)-1], root(8), ErrInvalidProof},
 		{"(5, 8) proof with one extra hash", leaf(5), 5, 8, append(slices.Clone(p58), leaf(0)), root(8), ErrInvalidProof},
+		// Only the step-4a length rule (sn reaches 0 with proof left) rejects
+		// this: the extra hash would otherwise climb to the size-2 root.
+		{"(1, 2) proof offered as (0, 1)", leaf(1), 0, 1, p12, root(2), ErrInvalidProof},
 		{"wrong leaf", leaf(4), 5, 8, p58, root(8), ErrInvalidProof},
 		{"flipped byte in a proof hash", leaf(5), 5, 8, flipped, root(8), ErrInvalidProof},
 		{"wrong root", leaf(5), 5, 8, p58, root(7), ErrInvalidProof},
