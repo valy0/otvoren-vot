@@ -3,15 +3,18 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 
 	"github.com/valy0/otvoren-vot/bulletin-board/board"
 	"github.com/valy0/otvoren-vot/bulletin-board/internal/testdb"
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
+	"github.com/valy0/otvoren-vot/crypto/merkle"
 )
 
 const testAPIKey = "test-key"
@@ -349,45 +352,154 @@ func TestListBallots_InvalidLimit(t *testing.T) {
 // GET /api/v1/board/{ballot_id} — handleGetBallot
 // ---------------------------------------------------------------------------
 
-func TestGetBallot_WithMerkleProof(t *testing.T) {
-	server, _ := setupTestServer(t)
+// ballotInclusion is the Merkle part of a GET /api/v1/board/{ballot_id}
+// response.
+type ballotInclusion struct {
+	position uint64
+	treeSize uint64
+	proof    []merkle.Hash
+	rootHex  string
+	root     merkle.Hash
+}
 
-	submitBallot(t, server.URL, "proof-ballot")
+var hashHexRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-	resp, err := http.Get(server.URL + "/api/v1/board/proof-ballot")
+// decodeHashHex fails the test unless v is a hash in the wire encoding of
+// docs/protocol/merkle.md §6: 64 lowercase hex characters.
+func decodeHashHex(t *testing.T, label string, v interface{}) merkle.Hash {
+	t.Helper()
+	s, ok := v.(string)
+	if !ok || !hashHexRE.MatchString(s) {
+		t.Fatalf("%s = %v, want 64 lowercase hex characters", label, v)
+	}
+	var h merkle.Hash
+	if _, err := hex.Decode(h[:], []byte(s)); err != nil {
+		t.Fatalf("%s: %v", label, err)
+	}
+	return h
+}
+
+func getBallotInclusion(t *testing.T, serverURL, ballotID string) ballotInclusion {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/api/v1/board/" + ballotID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+		t.Fatalf("get %s: expected 200, got %d", ballotID, resp.StatusCode)
 	}
-
 	var result Response
-	json.NewDecoder(resp.Body).Decode(&result)
-
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
 	data, ok := result.Data.(map[string]interface{})
 	if !ok {
 		t.Fatalf("data should be object, got %T", result.Data)
 	}
+	if data["ballot_id"] != ballotID {
+		t.Fatalf("expected ballot_id %q, got %v", ballotID, data["ballot_id"])
+	}
+	for _, field := range []string{"encrypted_ballot", "zk_proofs"} {
+		if _, exists := data[field]; !exists {
+			t.Fatalf("response should include the %s field", field)
+		}
+	}
+	position, ok := data["position"].(float64)
+	if !ok {
+		t.Fatalf("position = %v, want a number", data["position"])
+	}
+	treeSize, ok := data["tree_size"].(float64)
+	if !ok {
+		t.Fatalf("tree_size = %v, want a number", data["tree_size"])
+	}
+	rawProof, ok := data["merkle_proof"].([]interface{})
+	if !ok {
+		t.Fatalf("merkle_proof should be an array, got %T", data["merkle_proof"])
+	}
+	got := ballotInclusion{
+		position: uint64(position),
+		treeSize: uint64(treeSize),
+		proof:    make([]merkle.Hash, len(rawProof)),
+		root:     decodeHashHex(t, "root_sha256", data["root_sha256"]),
+	}
+	got.rootHex = hex.EncodeToString(got.root[:])
+	for i, p := range rawProof {
+		got.proof[i] = decodeHashHex(t, fmt.Sprintf("merkle_proof[%d]", i), p)
+	}
+	return got
+}
 
-	// Verify ballot_id is present
-	if data["ballot_id"] != "proof-ballot" {
-		t.Fatalf("expected ballot_id 'proof-ballot', got %v", data["ballot_id"])
+func getBoardRoot(t *testing.T, serverURL string) string {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/api/v1/board/root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("get root: expected 200, got %d", resp.StatusCode)
+	}
+	var result Response
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	data, ok := result.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("data should be object, got %T", result.Data)
+	}
+	root, ok := data["root_sha256"].(string)
+	if !ok {
+		t.Fatalf("root_sha256 = %v, want a string", data["root_sha256"])
+	}
+	return root
+}
+
+func TestGetBallot_WithMerkleProof(t *testing.T) {
+	server, _ := setupTestServer(t)
+
+	for i := 0; i < 5; i++ {
+		submitBallot(t, server.URL, fmt.Sprintf("proof-%d", i))
 	}
 
-	// Verify merkle_proof field exists
-	if _, exists := data["merkle_proof"]; !exists {
-		t.Fatal("response should include merkle_proof field")
+	// The leaf is built from the bytes submitBallot sent. The response's
+	// encrypted_ballot/zk_proofs come back re-serialised by JSONB and may
+	// differ byte-wise (H13, fixed in PR 7), so the leaf is not rebuilt from
+	// the response.
+	leaf := merkle.LeafHash(board.EncodeLeaf("proof-2",
+		json.RawMessage(`{"v":[1,0]}`), json.RawMessage(`{"p":[]}`)))
+
+	check := func(wantSize uint64) ballotInclusion {
+		t.Helper()
+		got := getBallotInclusion(t, server.URL, "proof-2")
+		if got.position != 3 {
+			t.Fatalf("position = %d, want 3", got.position)
+		}
+		if got.treeSize != wantSize {
+			t.Fatalf("tree_size = %d, want %d", got.treeSize, wantSize)
+		}
+		// PATH(2, D[n]) for n = 5 or 6 is [d(3), MTH(D[0:2]), MTH(D[4:n])].
+		if len(got.proof) != 3 {
+			t.Fatalf("merkle_proof has %d hashes, want 3 for index 2 of %d", len(got.proof), wantSize)
+		}
+		if root := getBoardRoot(t, server.URL); got.rootHex != root {
+			t.Fatalf("root_sha256 = %s, GET /api/v1/board/root says %s", got.rootHex, root)
+		}
+		// The leaf index is position - 1: positions are 1-based.
+		if err := merkle.VerifyInclusion(leaf, got.position-1, got.treeSize, got.proof, got.root); err != nil {
+			t.Fatalf("inclusion proof at size %d should verify: %v", wantSize, err)
+		}
+		return got
 	}
 
-	// Verify encrypted_ballot field exists
-	if _, exists := data["encrypted_ballot"]; !exists {
-		t.Fatal("response should include encrypted_ballot field")
-	}
+	before := check(5)
 
-	// Verify zk_proofs field exists
-	if _, exists := data["zk_proofs"]; !exists {
-		t.Fatal("response should include zk_proofs field")
+	// A later append: the same ballot's proof is recomputed against the new
+	// head and still verifies.
+	submitBallot(t, server.URL, "proof-5")
+	after := check(before.treeSize + 1)
+	if after.root == before.root {
+		t.Fatal("root_sha256 did not change after an append")
 	}
 }
 

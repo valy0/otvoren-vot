@@ -56,7 +56,7 @@ func TestAppendAndRetrieve(t *testing.T) {
 		t.Fatal("root should not be empty")
 	}
 
-	rec, proof, err := b.GetBallot(ctx, "ballot-1")
+	rec, inc, err := b.GetBallot(ctx, "ballot-1")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -66,10 +66,47 @@ func TestAppendAndRetrieve(t *testing.T) {
 
 	// Verify Merkle proof
 	leafData := EncodeLeaf("ballot-1", json.RawMessage(`{"v":[1,0]}`), json.RawMessage(`{"p":[]}`))
-	rootBytes, _ := hex.DecodeString(b.Root())
-	if !merkle.VerifyInclusion(rootBytes, leafData, 0, b.Size(), proof) {
-		t.Fatal("Merkle inclusion proof should verify")
+	if err := merkle.VerifyInclusion(merkle.LeafHash(leafData), uint64(rec.Position-1), inc.TreeSize, inc.Proof, inc.Root); err != nil {
+		t.Fatalf("Merkle inclusion proof should verify: %v", err)
 	}
+	if hex.EncodeToString(inc.Root[:]) != b.Root() {
+		t.Fatalf("inclusion root %x != board root %s", inc.Root, b.Root())
+	}
+}
+
+func TestGetBallotProofAfterLaterAppends(t *testing.T) {
+	b := setupBoard(t)
+	ctx := context.Background()
+
+	enc, zk := json.RawMessage(`{"v":[1,0]}`), json.RawMessage(`{"p":[]}`)
+	for i := 1; i <= 3; i++ {
+		if _, err := b.AppendBallot(ctx, fmt.Sprintf("b-%d", i), enc, zk); err != nil {
+			t.Fatalf("append %d: %v", i, err)
+		}
+	}
+	leaf := merkle.LeafHash(EncodeLeaf("b-1", enc, zk))
+
+	check := func(wantSize uint64) {
+		t.Helper()
+		rec, inc, err := b.GetBallot(ctx, "b-1")
+		if err != nil || rec == nil {
+			t.Fatalf("get: rec=%v err=%v", rec, err)
+		}
+		if inc.TreeSize != wantSize {
+			t.Fatalf("tree size = %d, want %d", inc.TreeSize, wantSize)
+		}
+		if hex.EncodeToString(inc.Root[:]) != b.Root() {
+			t.Fatalf("inclusion root %x != board root %s", inc.Root, b.Root())
+		}
+		if err := merkle.VerifyInclusion(leaf, uint64(rec.Position-1), inc.TreeSize, inc.Proof, inc.Root); err != nil {
+			t.Fatalf("proof at size %d does not verify: %v", wantSize, err)
+		}
+	}
+	check(3)
+	if _, err := b.AppendBallot(ctx, "b-4", enc, zk); err != nil {
+		t.Fatalf("append 4: %v", err)
+	}
+	check(4)
 }
 
 func TestAppendMultiple(t *testing.T) {

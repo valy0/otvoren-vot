@@ -51,7 +51,7 @@ The Bulletin Board maintains two parallel Merkle trees over the same set of ball
 **SHA-256 tree (public tree):**
 - Hash function: SHA-256, standard, universally available
 - Purpose: external verification, API responses, inclusion proofs for voter receipts, post-election audit by any party
-- Leaf value: `SHA-256(ballot_id || encrypted_ballot_bytes || zk_proofs_bytes)`
+- Leaf hash: `SHA-256(0x00 ‖ leaf bytes)`, where leaf bytes are `u32be(len)‖ballot_id ‖ u32be(len)‖encrypted_ballot ‖ u32be(len)‖zk_proofs`. The tree is an RFC 9162 Merkle tree; see [merkle.md](../protocol/merkle.md)
 - Auditable by anyone with a standard cryptographic library
 
 **Poseidon tree (SNARK tree):**
@@ -105,7 +105,7 @@ Each monitor independently stores the sequence of signed roots as they arrive. M
 
 ### 2.3 Consistency Verification
 
-Standard Merkle consistency proofs allow any monitor to verify that each new root is a consistent forward extension of the previous root — i.e., no previously appended entry has been modified or removed.
+RFC 9162 consistency proofs ([merkle.md](../protocol/merkle.md)) allow any monitor to verify that each new root is a consistent forward extension of the previous root — i.e., no previously appended entry has been modified or removed.
 
 A monitor verifies consistency between root at time T1 (with N1 ballots) and root at time T2 (with N2 > N1 ballots) by:
 1. Requesting a consistency proof from `GET /api/v1/board/consistency?from={N1}&to={N2}`
