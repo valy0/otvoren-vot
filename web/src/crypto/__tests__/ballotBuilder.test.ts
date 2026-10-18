@@ -129,6 +129,49 @@ describe('buildBallot', () => {
     }
   })
 
+  describe('rejects invalid choices before drawing any randomness', () => {
+    const cases: Array<[string, Partial<WorkerRequest>, RegExp]> = [
+      ['candidateIndex = numCandidates', { candidateIndex: NUM_CANDIDATES }, /candidateIndex/],
+      ['candidateIndex = numCandidates + 1', { candidateIndex: NUM_CANDIDATES + 1 }, /candidateIndex/],
+      ['candidateIndex = -2', { candidateIndex: -2 }, /candidateIndex/],
+      ['candidateIndex = 0.5', { candidateIndex: 0.5 }, /candidateIndex/],
+      ['candidateIndex = NaN', { candidateIndex: NaN }, /candidateIndex/],
+      ['partyIndex = -1', { partyIndex: -1 }, /partyIndex/],
+      ['partyIndex = numParties + 1', { partyIndex: NUM_PARTIES + 1 }, /partyIndex/],
+      ['partyIndex = 0.5', { partyIndex: 0.5 }, /partyIndex/],
+      ['partyIndex = NaN', { partyIndex: NaN }, /partyIndex/],
+      ['numParties = 0', { numParties: 0, partyIndex: 0 }, /numParties/],
+      ['numParties = 1.5', { numParties: 1.5, partyIndex: 0 }, /numParties/],
+      ['numCandidates = -1', { numCandidates: -1 }, /numCandidates/],
+      ['numCandidates = 1.5', { numCandidates: 1.5 }, /numCandidates/],
+    ]
+    for (const [name, overrides, message] of cases) {
+      it(name, () => {
+        const sodium = getSodium()
+        const { pk } = newKeyPair()
+        const randombytes = vi.spyOn(sodium, 'randombytes_buf')
+        const scalarRandom = vi.spyOn(sodium, 'crypto_core_ristretto255_scalar_random')
+        try {
+          expect(() => build(pk, overrides)).toThrow(message)
+          expect(randombytes).not.toHaveBeenCalled()
+          expect(scalarRandom).not.toHaveBeenCalled()
+        } finally {
+          randombytes.mockRestore()
+          scalarRandom.mockRestore()
+        }
+      })
+    }
+
+    it('still accepts every choice the UI can send', () => {
+      const { pk } = newKeyPair()
+      // blank vote, party without candidates, no preference, last candidate
+      expect(() => build(pk, { partyIndex: NUM_PARTIES, candidateIndex: -1, numCandidates: 0 })).not.toThrow()
+      expect(() => build(pk, { partyIndex: 0, candidateIndex: -1, numCandidates: 0 })).not.toThrow()
+      expect(() => build(pk, { candidateIndex: -1 })).not.toThrow()
+      expect(() => build(pk, { candidateIndex: NUM_CANDIDATES - 1 })).not.toThrow()
+    })
+  })
+
   it('selects the last candidate slot for candidateIndex = -1 (no preference)', () => {
     const { sk, pk } = newKeyPair()
     const res = build(pk, { candidateIndex: -1 })

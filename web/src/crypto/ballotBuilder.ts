@@ -49,10 +49,29 @@ function toBase64Url(bytes: Uint8Array): string {
  * randomness; throws on invalid input (the worker wrapper reports errors).
  */
 export function buildBallot(req: WorkerRequest, sodium: typeof sodiumLib): WorkerResponse {
-  // Step 1: Every proof is bound to the election id. Refuse an empty one before
-  // any randomness is drawn for a ballot that could not be proved.
+  // Step 1: Validate every input before the key decode and before any
+  // randomness is drawn, so a ballot that could not be proved is never started.
+  // Every proof is bound to the election id, so an empty one is refused.
   if (typeof req.electionId !== 'string' || req.electionId.length === 0) {
     throw new Error('Invalid election id: empty')
+  }
+  const { partyIndex, numParties } = req
+  if (!Number.isInteger(numParties) || numParties < 1) {
+    throw new Error(`Invalid numParties ${numParties}: expected an integer >= 1`)
+  }
+  // partyIndex range is 0..numParties inclusive (numParties = blank vote)
+  if (!Number.isInteger(partyIndex) || partyIndex < 0 || partyIndex > numParties) {
+    throw new Error(`partyIndex ${partyIndex} out of range [0, ${numParties}]`)
+  }
+  if (req.numCandidates !== undefined && (!Number.isInteger(req.numCandidates) || req.numCandidates < 0)) {
+    throw new Error(`Invalid numCandidates ${req.numCandidates}: expected an integer >= 0`)
+  }
+  if (req.candidateIndex !== undefined) {
+    const ci = req.candidateIndex
+    const inRange = ci === -1 || (req.numCandidates !== undefined && req.numCandidates > 0 && ci >= 0 && ci < req.numCandidates)
+    if (!Number.isInteger(ci) || !inRange) {
+      throw new Error(`candidateIndex ${ci} out of range: expected -1 or [0, ${(req.numCandidates ?? 0) - 1}]`)
+    }
   }
 
   // Step 2: Decode the election public key
@@ -69,12 +88,6 @@ export function buildBallot(req: WorkerRequest, sodium: typeof sodiumLib): Worke
   const proofCtx = (index: number): ProofContext => ({ electionId: req.electionId, ballotId, index })
 
   // Step 4: Build the one-hot party vector and encrypt each element
-  // partyIndex range is now 0..numParties (inclusive; last = blank vote)
-  const { partyIndex, numParties } = req
-  if (partyIndex < 0 || partyIndex > numParties) {
-    throw new Error(`partyIndex ${partyIndex} out of range [0, ${numParties}]`)
-  }
-
   const partyVectorLen = numParties + 1  // +1 for blank vote slot
   const encResults = Array.from({ length: partyVectorLen }, (_, i) =>
     encrypt(i === partyIndex ? 1 : 0, pubKey)
