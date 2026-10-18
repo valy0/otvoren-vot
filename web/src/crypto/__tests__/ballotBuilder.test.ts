@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { initSodium, getSodium } from '../sodium'
 import { bytesToHex, deserializeCiphertext, hexToBytes, type Ciphertext } from '../elgamal'
 import { verifyBinary, verifySumOne } from '../proofs'
@@ -113,6 +113,21 @@ describe('buildBallot', () => {
       expect(verifySumOne(ctx(0), pk, partyCts, sumOneFromHex(res.zkProofs.sum_one))).toBe(true)
     })
   }
+
+  it('rejects an empty election id before drawing any randomness', () => {
+    const sodium = getSodium()
+    const { pk } = newKeyPair()
+    const randombytes = vi.spyOn(sodium, 'randombytes_buf')
+    const scalarRandom = vi.spyOn(sodium, 'crypto_core_ristretto255_scalar_random')
+    try {
+      expect(() => build(pk, { electionId: '' })).toThrow(/election id/)
+      expect(randombytes).not.toHaveBeenCalled()
+      expect(scalarRandom).not.toHaveBeenCalled()
+    } finally {
+      randombytes.mockRestore()
+      scalarRandom.mockRestore()
+    }
+  })
 
   it('selects the last candidate slot for candidateIndex = -1 (no preference)', () => {
     const { sk, pk } = newKeyPair()

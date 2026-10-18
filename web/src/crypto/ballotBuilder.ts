@@ -49,6 +49,12 @@ function toBase64Url(bytes: Uint8Array): string {
  * randomness; throws on invalid input (the worker wrapper reports errors).
  */
 export function buildBallot(req: WorkerRequest, sodium: typeof sodiumLib): WorkerResponse {
+  // Step 1: Every proof is bound to the election id. Refuse an empty one before
+  // any randomness is drawn for a ballot that could not be proved.
+  if (typeof req.electionId !== 'string' || req.electionId.length === 0) {
+    throw new Error('Invalid election id: empty')
+  }
+
   // Step 2: Decode the election public key
   if (req.electionPubKey.length !== 64) {
     throw new Error(`Invalid election public key length: expected 64 hex chars, got ${req.electionPubKey.length}`)

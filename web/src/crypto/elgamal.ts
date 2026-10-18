@@ -31,11 +31,18 @@ export function encrypt(messageBit: 0 | 1, pubKey: Uint8Array): EncryptionResult
  * Encrypts a single bit (0 or 1) under the given public key with the caller's
  * randomness `r`: c1 = g^r, c2 = h^r + g^m. Mirrors Go's
  * elgamal.EncryptWithRandomness; used for deterministic test vectors.
- * Throws unless messageBit is exactly 0 or 1.
+ * Throws unless messageBit is exactly 0 or 1 and r is a canonical scalar
+ * (libsodium's scalarmult clears bit 255 of r while its scalar arithmetic
+ * reduces r mod ℓ, so a non-canonical r would give a ciphertext that does not
+ * match the randomness the proofs use). A zero r makes libsodium throw, as Go
+ * refuses it: c1 would be the identity and reveal m.
  */
 export function encryptWithRandomness(messageBit: 0 | 1, r: Uint8Array, pubKey: Uint8Array): Ciphertext {
   if (messageBit !== 0 && messageBit !== 1) {
     throw new Error(`messageBit must be 0 or 1, got ${String(messageBit)}`)
+  }
+  if (!isCanonicalScalar(r)) {
+    throw new Error('Encryption randomness must be a canonical 32-byte scalar (< ℓ)')
   }
   const sodium = getSodium()
   const c1 = sodium.crypto_scalarmult_ristretto255_base(r)
@@ -101,13 +108,31 @@ export function bytesToHex(bytes: Uint8Array): string {
     .join('')
 }
 
+/**
+ * Decodes hex (either case) to bytes. Throws on an odd length or any
+ * character outside [0-9a-fA-F]; parseInt alone would read "zz" as 0 and
+ * " f" or "+f" as 15.
+ */
 export function hexToBytes(hex: string): Uint8Array {
   if (hex.length % 2 !== 0) throw new Error('Hex string must have even length')
+  if (!/^[0-9a-f]*$/i.test(hex)) throw new Error('Hex string has a non-hex character')
   const bytes = new Uint8Array(hex.length / 2)
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
   }
   return bytes
+}
+
+/**
+ * A 32-byte little-endian scalar strictly below ℓ: reducing it changes
+ * nothing. Go's group.DecodeScalar accepts exactly these.
+ */
+export function isCanonicalScalar(x: unknown): x is Uint8Array {
+  if (!(x instanceof Uint8Array) || x.length !== 32) return false
+  const wide = new Uint8Array(64)
+  wide.set(x)
+  const reduced = getSodium().crypto_core_ristretto255_scalar_reduce(wide)
+  return reduced.every((byte, i) => byte === x[i])
 }
 
 // ---------------------------------------------------------------------------

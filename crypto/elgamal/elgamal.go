@@ -38,6 +38,10 @@ type Ciphertext struct {
 // ErrInvalidPublicKey is returned when the encryption key is nil or the identity.
 var ErrInvalidPublicKey = errors.New("invalid public key")
 
+// ErrInvalidRandomness is returned when the encryption randomness is nil or
+// zero. A zero r makes c1 the identity and c2 = g^m, revealing m.
+var ErrInvalidRandomness = errors.New("invalid encryption randomness")
+
 const MaxDecrypt = 5_000_000
 
 // Encrypt encrypts a small integer m under the given public key.
@@ -50,7 +54,8 @@ func Encrypt(publicKey *ristretto255.Element, m int) (*Ciphertext, *ristretto255
 	return ct, r, nil
 }
 
-// EncryptWithRandomness encrypts m with explicit randomness r.
+// EncryptWithRandomness encrypts m with explicit randomness r. It refuses a
+// nil or zero r with ErrInvalidRandomness.
 func EncryptWithRandomness(publicKey *ristretto255.Element, m int, r *ristretto255.Scalar) (*Ciphertext, error) {
 	if publicKey == nil {
 		return nil, fmt.Errorf("nil key: %w", ErrInvalidPublicKey)
@@ -59,7 +64,10 @@ func EncryptWithRandomness(publicKey *ristretto255.Element, m int, r *ristretto2
 		return nil, fmt.Errorf("identity key would reveal the plaintext: %w", ErrInvalidPublicKey)
 	}
 	if r == nil {
-		return nil, errors.New("nil encryption randomness")
+		return nil, fmt.Errorf("nil randomness: %w", ErrInvalidRandomness)
+	}
+	if r.Equal(ristretto255.NewScalar()) == 1 {
+		return nil, fmt.Errorf("zero randomness would reveal the plaintext: %w", ErrInvalidRandomness)
 	}
 	gm, err := internal.ScalarBaseMultInt(m)
 	if err != nil {

@@ -1,6 +1,6 @@
 import { getSodium } from './sodium'
 import { fiatShamir } from './fiatShamir'
-import { type Ciphertext, homomorphicSum } from './elgamal'
+import { type Ciphertext, homomorphicSum, isCanonicalScalar } from './elgamal'
 
 // Domain separators of docs/protocol/fiat-shamir.md; identical to the Go
 // constants in crypto/proof/{binary,sum,candidate}.go.
@@ -551,14 +551,6 @@ function isPoint(x: unknown): boolean {
   if (!isBytes32(x)) return false
   if (isAllZero(x)) return false
   return getSodium().crypto_core_ristretto255_is_valid_point(x)
-}
-
-/** A 32-byte little-endian scalar strictly below ℓ: reducing it changes nothing. */
-function isCanonicalScalar(x: unknown): boolean {
-  if (!isBytes32(x)) return false
-  const wide = new Uint8Array(64)
-  wide.set(x)
-  return bytesEqual(getSodium().crypto_core_ristretto255_scalar_reduce(wide), x)
 }
 
 /**

@@ -124,3 +124,21 @@ func TestEncryptRejectsBadPublicKey(t *testing.T) {
 		t.Error("EncryptWithRandomness with nil r: want error")
 	}
 }
+
+// A zero r makes c1 the identity and c2 = g^m, which reveals m; the TS client
+// refuses it too, and CiphertextFromBytes would reject the output.
+func TestEncryptRejectsZeroRandomness(t *testing.T) {
+	pk := GenerateKeyPair().PublicKey
+	for _, m := range []int{0, 1} {
+		ct, err := EncryptWithRandomness(pk, m, ristretto255.NewScalar())
+		if !errors.Is(err, ErrInvalidRandomness) {
+			t.Fatalf("EncryptWithRandomness(m=%d, r=0): err = %v, want ErrInvalidRandomness", m, err)
+		}
+		if ct != nil {
+			t.Fatalf("EncryptWithRandomness(m=%d, r=0): ciphertext must be nil on error", m)
+		}
+	}
+	if _, err := EncryptWithRandomness(pk, 1, nil); !errors.Is(err, ErrInvalidRandomness) {
+		t.Fatalf("EncryptWithRandomness(r=nil): err = %v, want ErrInvalidRandomness", err)
+	}
+}

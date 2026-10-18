@@ -55,6 +55,10 @@ export async function fetchElectionConfig(bbUrl: string): Promise<ElectionConfig
   if (!data || typeof data.election_id !== 'string' || typeof data.public_key !== 'string') {
     throw new Error('Bulletin Board response is missing required fields (election_id, public_key)')
   }
+  if (data.election_id.length === 0) {
+    // Every ballot proof is bound to the election id; an empty one cannot be proved.
+    throw new Error('Bulletin Board response has an empty election_id')
+  }
   if (!Array.isArray(data.parties)) {
     throw new Error('Bulletin Board response is missing parties array')
   }
