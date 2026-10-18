@@ -6,6 +6,7 @@ require (
 	filippo.io/edwards25519 v1.2.0
 	github.com/consensys/gnark v0.14.0
 	github.com/consensys/gnark-crypto v0.19.2
+	github.com/gtank/ristretto255 v0.2.0
 )
 
 require (
