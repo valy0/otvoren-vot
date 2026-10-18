@@ -39,8 +39,19 @@ function isHash(x: unknown): x is Uint8Array {
   return x instanceof Uint8Array && x.length === HASH_SIZE
 }
 
-function isHashList(xs: readonly unknown[]): xs is readonly Uint8Array[] {
-  return Array.isArray(xs) && xs.every(isHash)
+/**
+ * One dense snapshot of the caller's proof: holes become undefined and then
+ * fail isHash, and the walk never reads the caller's array again. Null when
+ * proof is not an array of 32-byte Uint8Arrays (or reading it throws).
+ */
+function snapshotProof(proof: readonly Uint8Array[]): Uint8Array[] | null {
+  try {
+    if (!Array.isArray(proof)) return null
+    const path = Array.from(proof)
+    return path.every(isHash) ? path : null
+  } catch {
+    return null
+  }
 }
 
 function isCount(x: unknown): x is number {
@@ -67,12 +78,13 @@ export function verifyInclusion(
   root: Uint8Array,
 ): boolean {
   if (!isCount(index) || !isCount(size)) return false
-  if (!isHash(leaf) || !isHash(root) || !isHashList(proof)) return false
+  const path = snapshotProof(proof)
+  if (!isHash(leaf) || !isHash(root) || path === null) return false
   if (index >= size) return false
   let fn = BigInt(index)
   let sn = BigInt(size) - 1n
   let r = leaf
-  for (const p of proof) {
+  for (const p of path) {
     if (sn === 0n) return false
     if ((fn & 1n) === 1n || fn === sn) {
       r = nodeHash(p, r)
@@ -103,21 +115,22 @@ export function verifyConsistency(
   proof: readonly Uint8Array[],
 ): boolean {
   if (!isCount(size1) || !isCount(size2)) return false
-  if (!isHash(root1) || !isHash(root2) || !isHashList(proof)) return false
+  const path = snapshotProof(proof)
+  if (!isHash(root1) || !isHash(root2) || path === null) return false
   if (size1 > size2) return false
   if (size1 === 0 || size1 === size2) {
-    if (proof.length !== 0) return false
+    if (path.length !== 0) return false
     if (size1 === 0 && !equal(root1, emptyRoot())) return false
     if (size1 === size2 && !equal(root1, root2)) return false
     return true
   }
-  if (proof.length === 0) return false
+  if (path.length === 0) return false
   const s1 = BigInt(size1)
-  let start = proof[0]
-  let rest = proof.slice(1)
+  let start = path[0]
+  let rest = path.slice(1)
   if ((s1 & (s1 - 1n)) === 0n) {
     start = root1
-    rest = proof.slice(0)
+    rest = path
   }
   let fn = s1 - 1n
   let sn = BigInt(size2) - 1n

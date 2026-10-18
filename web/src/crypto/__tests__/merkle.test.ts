@@ -149,9 +149,45 @@ describe('TS-only negatives never throw and return false', () => {
     })
   }
 
-  it('rejects a proof element that is not a Uint8Array', () => {
-    const notBytes = 'aa'.repeat(32) as unknown as Uint8Array
-    expect(incOk(inc.index, inc.size, undefined, [notBytes, ...hs(inc.proof_hex).slice(1)])).toBe(false)
-    expect(conOk(con.size1, con.size2, undefined, undefined, [notBytes, ...hs(con.proof_hex).slice(1)])).toBe(false)
+  it('rejects proof elements that are not a Uint8Array', () => {
+    // A plain array holding the CORRECT bytes would verify if only the length were checked.
+    const plain = (b: Uint8Array): Uint8Array => Array.from(b) as unknown as Uint8Array
+    const ip = hs(inc.proof_hex)
+    const cp = hs(con.proof_hex)
+    const swapFirst = (xs: Uint8Array[], bad: Uint8Array): Uint8Array[] => [bad, ...xs.slice(1)]
+    const nul = null as unknown as Uint8Array
+    const str = 'aa'.repeat(32) as unknown as Uint8Array
+    for (const mk of [plain, () => nul, () => str]) {
+      expect(incOk(inc.index, inc.size, undefined, swapFirst(ip, mk(ip[0])))).toBe(false)
+      expect(conOk(con.size1, con.size2, undefined, undefined, swapFirst(cp, mk(cp[0])))).toBe(false)
+    }
+  })
+
+  it('rejects a sparse proof without throwing', () => {
+    expect(incOk(0, 2, undefined, new Array<Uint8Array>(1))).toBe(false)
+    expect(conOk(3, 8, undefined, undefined, new Array<Uint8Array>(1))).toBe(false)
+    expect(conOk(4, 8, undefined, undefined, new Array<Uint8Array>(1))).toBe(false)
+    const holed = (xs: Uint8Array[], at: number): Uint8Array[] => {
+      const copy = [...xs]
+      delete copy[at]
+      return copy
+    }
+    const ip = hs(inc.proof_hex)
+    for (let at = 0; at < ip.length; at++) expect(incOk(inc.index, inc.size, undefined, holed(ip, at))).toBe(false)
+    const cp = hs(con.proof_hex)
+    for (let at = 0; at < cp.length; at++) {
+      expect(conOk(con.size1, con.size2, undefined, undefined, holed(cp, at))).toBe(false)
+    }
+  })
+})
+
+describe('vector file', () => {
+  it('has every category non-empty', () => {
+    expect(vectors.leaves_hex.length).toBeGreaterThan(0)
+    expect(vectors.roots.length).toBeGreaterThan(0)
+    expect(vectors.inclusion.length).toBeGreaterThan(0)
+    expect(vectors.consistency.length).toBeGreaterThan(0)
+    expect(vectors.invalid_inclusion.length).toBeGreaterThan(0)
+    expect(vectors.invalid_consistency.length).toBeGreaterThan(0)
   })
 })
