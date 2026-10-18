@@ -1,6 +1,7 @@
 package elgamal
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gtank/ristretto255"
@@ -34,6 +35,9 @@ type Ciphertext struct {
 	C2 *ristretto255.Element
 }
 
+// ErrInvalidPublicKey is returned when the encryption key is nil or the identity.
+var ErrInvalidPublicKey = errors.New("invalid public key")
+
 const MaxDecrypt = 5_000_000
 
 // Encrypt encrypts a small integer m under the given public key.
@@ -48,6 +52,15 @@ func Encrypt(publicKey *ristretto255.Element, m int) (*Ciphertext, *ristretto255
 
 // EncryptWithRandomness encrypts m with explicit randomness r.
 func EncryptWithRandomness(publicKey *ristretto255.Element, m int, r *ristretto255.Scalar) (*Ciphertext, error) {
+	if publicKey == nil {
+		return nil, fmt.Errorf("nil key: %w", ErrInvalidPublicKey)
+	}
+	if publicKey.Equal(ristretto255.NewIdentityElement()) == 1 {
+		return nil, fmt.Errorf("identity key would reveal the plaintext: %w", ErrInvalidPublicKey)
+	}
+	if r == nil {
+		return nil, errors.New("nil encryption randomness")
+	}
 	gm, err := internal.ScalarBaseMultInt(m)
 	if err != nil {
 		return nil, fmt.Errorf("encrypting plaintext: %w", err)

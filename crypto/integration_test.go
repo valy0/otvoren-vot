@@ -72,7 +72,7 @@ func TestFullElectionSimulation(t *testing.T) {
 
 		// Verify sum-to-one proof
 		rSum := internal.SumScalars(ballots[i].PartyRandomness)
-		ctx.Index = numParties
+		ctx.Index = 0
 		sp, err := proof.ProveSumOne(ctx, electionPK, ballots[i].PartyVector, rSum)
 		if err != nil {
 			t.Fatalf("voter %d: ProveSumOne: %v", i, err)

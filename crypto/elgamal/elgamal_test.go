@@ -1,9 +1,11 @@
 package elgamal
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/gtank/ristretto255"
+	"github.com/valy0/otvoren-vot/crypto/internal"
 )
 
 func mustEncrypt(t *testing.T, pk *ristretto255.Element, m int) (*Ciphertext, *ristretto255.Scalar) {
@@ -104,5 +106,21 @@ func TestEncryptReturnsRandomness(t *testing.T) {
 	}
 	if ct.C1.Equal(ct2.C1) != 1 || ct.C2.Equal(ct2.C2) != 1 {
 		t.Fatal("Encrypt and EncryptWithRandomness with same r should produce same ciphertext")
+	}
+}
+
+func TestEncryptRejectsBadPublicKey(t *testing.T) {
+	identity := ristretto255.NewIdentityElement()
+	r := internal.RandomScalar()
+	for name, pk := range map[string]*ristretto255.Element{"nil": nil, "identity": identity} {
+		if _, _, err := Encrypt(pk, 1); !errors.Is(err, ErrInvalidPublicKey) {
+			t.Errorf("Encrypt with %s key: err = %v, want ErrInvalidPublicKey", name, err)
+		}
+		if _, err := EncryptWithRandomness(pk, 1, r); !errors.Is(err, ErrInvalidPublicKey) {
+			t.Errorf("EncryptWithRandomness with %s key: err = %v, want ErrInvalidPublicKey", name, err)
+		}
+	}
+	if _, err := EncryptWithRandomness(GenerateKeyPair().PublicKey, 1, nil); err == nil {
+		t.Error("EncryptWithRandomness with nil r: want error")
 	}
 }

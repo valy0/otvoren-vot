@@ -28,16 +28,6 @@ func RandomScalar() *ristretto255.Scalar {
 	return uniformScalar(buf)
 }
 
-// HashToScalar hashes a domain separator and arbitrary data to a scalar.
-func HashToScalar(domain, data []byte) *ristretto255.Scalar {
-	h := sha512.New()
-	h.Write(domain)
-	h.Write(data)
-	var digest [64]byte
-	copy(digest[:], h.Sum(nil))
-	return uniformScalar(digest)
-}
-
 // FiatShamir computes a non-interactive challenge for Sigma protocols.
 // Domain separator prevents cross-protocol attacks. The byte format is
 // specified in docs/protocol/fiat-shamir.md.

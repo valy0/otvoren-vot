@@ -15,18 +15,6 @@ func TestRandomScalar(t *testing.T) {
 	}
 }
 
-func TestHashToScalar(t *testing.T) {
-	s1 := HashToScalar([]byte("otvoren-vot.test"), []byte("input1"))
-	s2 := HashToScalar([]byte("otvoren-vot.test"), []byte("input2"))
-	s3 := HashToScalar([]byte("otvoren-vot.test"), []byte("input1"))
-	if s1.Equal(s2) == 1 {
-		t.Fatal("different inputs should produce different scalars")
-	}
-	if s1.Equal(s3) != 1 {
-		t.Fatal("same inputs should produce same scalar")
-	}
-}
-
 func TestFiatShamir(t *testing.T) {
 	e1 := FiatShamir("otvoren-vot.test-proof", []byte("data1"))
 	e2 := FiatShamir("otvoren-vot.test-proof", []byte("data2"))

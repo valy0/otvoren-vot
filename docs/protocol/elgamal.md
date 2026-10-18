@@ -79,7 +79,7 @@ In otvoren-vot, no single entity holds the full private key. Instead, 9 trustees
    x_i = f_1(i) + f_2(i) + ... + f_9(i)   (mod q)
    ```
 
-   This share `x_i` never leaves the HSM. The full private key `x = x_1 + x_2 + ... + x_9` is never computed or assembled anywhere — it exists only implicitly as the sum of shares evaluated at each trustee's index.
+   This share `x_i` never leaves the HSM. The joint private key `x = F(0) = a_{1,0} + a_{2,0} + ... + a_{9,0}` (the sum of the constant terms, not of the shares) is never computed or assembled anywhere — it exists only implicitly, as `Σ_{i∈S} λ_i·x_i` for any qualified set `S` of trustees.
 
    More precisely, the combined polynomial is `F(z) = f_1(z) + f_2(z) + ... + f_9(z)`, and `x = F(0)`, while `x_i = F(i)`. The key `x` can be reconstructed from any 5 shares via Lagrange interpolation, but this reconstruction never happens — instead, partial decryptions are combined (see Section 7).
 
