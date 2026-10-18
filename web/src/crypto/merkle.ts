@@ -113,6 +113,7 @@ export function verifyInclusion(
       if (sn === 0n) return false
       if ((fn & 1n) === 1n || fn === sn) {
         r = nodeHash(p, r)
+        // The fn !== 0n exit is unreachable while the sn === 0n check stands (RFC 9162 erratum 8670).
         while ((fn & 1n) === 0n && fn !== 0n) {
           fn >>= 1n
           sn >>= 1n
@@ -176,6 +177,7 @@ export function verifyConsistency(
       if ((fn & 1n) === 1n || fn === sn) {
         fr = nodeHash(c, fr)
         sr = nodeHash(c, sr)
+        // The fn !== 0n exit is unreachable while the sn === 0n check stands (RFC 9162 erratum 8670).
         while ((fn & 1n) === 0n && fn !== 0n) {
           fn >>= 1n
           sn >>= 1n

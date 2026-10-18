@@ -28,6 +28,7 @@ func VerifyInclusion(leafHash Hash, index, size uint64, proof []Hash, root Hash)
 		if fn&1 == 1 || fn == sn {
 			r = NodeHash(p, r)
 			// Climb past the levels where this node has no right sibling.
+			// The fn != 0 exit is unreachable while the sn == 0 check stands (RFC 9162 erratum 8670).
 			for fn&1 == 0 && fn != 0 {
 				fn >>= 1
 				sn >>= 1
@@ -114,6 +115,7 @@ func VerifyConsistency(size1, size2 uint64, root1, root2 Hash, proof []Hash) err
 			// Step 6b: c is a left sibling in both trees.
 			fr = NodeHash(c, fr)
 			sr = NodeHash(c, sr)
+			// The fn != 0 exit is unreachable while the sn == 0 check stands (RFC 9162 erratum 8670).
 			for fn&1 == 0 && fn != 0 {
 				fn >>= 1
 				sn >>= 1
