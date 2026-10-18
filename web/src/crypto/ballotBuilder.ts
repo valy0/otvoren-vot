@@ -1,0 +1,159 @@
+import type sodiumLib from 'libsodium-wrappers-sumo'
+import { encrypt, serializeCiphertext, hexToBytes, bytesToHex } from './elgamal'
+import { proveBinary, proveSumOne } from './proofs'
+import type { BinaryProof, ProofContext, SumOneProof } from './proofs'
+import type { WorkerRequest, WorkerResponse } from './worker'
+
+// Serialized proof types (all Uint8Array fields become hex strings)
+export interface SerializedBinaryProof {
+  a0: string; b0: string; a1: string; b1: string
+  e0: string; e1: string; z0: string; z1: string
+}
+
+export interface SerializedSumOneProof {
+  a: string; b: string; z: string
+}
+
+// ---------------------------------------------------------------------------
+// Serialization helpers
+// ---------------------------------------------------------------------------
+
+function serializeBinaryProof(p: BinaryProof): SerializedBinaryProof {
+  return {
+    a0: bytesToHex(p.a0), b0: bytesToHex(p.b0),
+    a1: bytesToHex(p.a1), b1: bytesToHex(p.b1),
+    e0: bytesToHex(p.e0), e1: bytesToHex(p.e1),
+    z0: bytesToHex(p.z0), z1: bytesToHex(p.z1),
+  }
+}
+
+function serializeSumOneProof(p: SumOneProof): SerializedSumOneProof {
+  return {
+    a: bytesToHex(p.a),
+    b: bytesToHex(p.b),
+    z: bytesToHex(p.z),
+  }
+}
+
+/** Base64url-encodes a Uint8Array without padding. */
+function toBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/**
+ * Builds an encrypted ballot with its zero-knowledge proofs. Pure apart from
+ * randomness; throws on invalid input (the worker wrapper reports errors).
+ */
+export function buildBallot(req: WorkerRequest, sodium: typeof sodiumLib): WorkerResponse {
+  // Step 2: Decode the election public key
+  if (req.electionPubKey.length !== 64) {
+    throw new Error(`Invalid election public key length: expected 64 hex chars, got ${req.electionPubKey.length}`)
+  }
+  const pubKey = hexToBytes(req.electionPubKey)
+
+  // Step 3: Generate a 256-bit ballot ID (32 random bytes, base64url encoded)
+  const ballotIdBytes = sodium.randombytes_buf(32)
+  const ballotId = toBase64Url(ballotIdBytes)
+  // Every proof is bound to (election, ballot, statement index); indices
+  // follow docs/protocol/ballot-proofs.md section 8.4.
+  const proofCtx = (index: number): ProofContext => ({ electionId: req.electionId, ballotId, index })
+
+  // Step 4: Build the one-hot party vector and encrypt each element
+  // partyIndex range is now 0..numParties (inclusive; last = blank vote)
+  const { partyIndex, numParties } = req
+  if (partyIndex < 0 || partyIndex > numParties) {
+    throw new Error(`partyIndex ${partyIndex} out of range [0, ${numParties}]`)
+  }
+
+  const partyVectorLen = numParties + 1  // +1 for blank vote slot
+  const encResults = Array.from({ length: partyVectorLen }, (_, i) =>
+    encrypt(i === partyIndex ? 1 : 0, pubKey)
+  )
+
+  // Step 5: Generate binary proof for each party element (party slot i → index i)
+  const binaryProofs = encResults.map((res, i) =>
+    proveBinary(proofCtx(i), i === partyIndex ? 1 : 0, res.randomness, pubKey, res.ciphertext)
+  )
+
+  // Step 6: Sum all randomness scalars, then generate sum=1 proof
+  const randomnessScalars = encResults.map(r => r.randomness)
+  let rSum = randomnessScalars[0]
+  for (let i = 1; i < randomnessScalars.length; i++) {
+    rSum = sodium.crypto_core_ristretto255_scalar_add(rSum, randomnessScalars[i])
+  }
+
+  const cts = encResults.map(r => r.ciphertext)
+  const sumProof = proveSumOne(proofCtx(0), cts, rSum, pubKey)  // party sum proof → index 0
+
+  // Step 7: Zero all randomness scalars
+  for (const r of randomnessScalars) {
+    sodium.memzero(r)
+  }
+  sodium.memzero(rSum)
+
+  // Step 8: Serialize ciphertexts and proofs to hex strings for JSON transport
+  const partyVector = cts.map(ct => serializeCiphertext(ct))
+  const serializedBinaryProofs = binaryProofs.map(serializeBinaryProof)
+  const serializedSumProof = serializeSumOneProof(sumProof)
+
+  // Step 9: Candidate vector encryption (if candidates provided)
+  let candidateVector: string[] = []
+  let candidateBinaryProofs: SerializedBinaryProof[] = []
+  let candidateSumProof: SerializedSumOneProof | null = null
+
+  const numCandidates = req.numCandidates ?? 0
+  const candidateIndex = req.candidateIndex ?? -1
+
+  if (numCandidates > 0) {
+    const candVectorLen = numCandidates + 1  // +1 for "no preference" virtual slot
+    // -1 means no preference → select last slot
+    const activeSlot = candidateIndex === -1 ? candVectorLen - 1 : candidateIndex
+
+    const candEncResults = Array.from({ length: candVectorLen }, (_, i) =>
+      encrypt(i === activeSlot ? 1 : 0, pubKey)
+    )
+
+    // Binary proofs for each candidate element (j-th slot → index numParties + 1 + j)
+    const candBinaryRaw = candEncResults.map((res, j) =>
+      proveBinary(proofCtx(numParties + 1 + j), j === activeSlot ? 1 : 0, res.randomness, pubKey, res.ciphertext)
+    )
+
+    // Sum-one proof for candidate vector
+    const candRandomness = candEncResults.map(r => r.randomness)
+    let candRSum = candRandomness[0]
+    for (let i = 1; i < candRandomness.length; i++) {
+      candRSum = sodium.crypto_core_ristretto255_scalar_add(candRSum, candRandomness[i])
+    }
+    const candCts = candEncResults.map(r => r.ciphertext)
+    const candSumProofRaw = proveSumOne(proofCtx(1), candCts, candRSum, pubKey)  // candidate sum-one proof → index 1
+
+    // Zero randomness
+    for (const r of candRandomness) { sodium.memzero(r) }
+    sodium.memzero(candRSum)
+
+    // Serialize
+    candidateVector = candCts.map(ct => serializeCiphertext(ct))
+    candidateBinaryProofs = candBinaryRaw.map(serializeBinaryProof)
+    candidateSumProof = serializeSumOneProof(candSumProofRaw)
+  }
+
+  return {
+    type: 'encrypt-result',
+    requestId: req.requestId,
+    ballotId,
+    encryptedBallot: {
+      party_vector: partyVector,
+      candidate_vectors: candidateVector.length > 0 ? [candidateVector] : [],
+    },
+    zkProofs: {
+      binary_party: serializedBinaryProofs,
+      sum_one: serializedSumProof,
+      binary_candidate: candidateBinaryProofs.length > 0 ? candidateBinaryProofs : undefined,
+      sum_one_candidate: candidateSumProof ?? undefined,
+    },
+  }
+}
