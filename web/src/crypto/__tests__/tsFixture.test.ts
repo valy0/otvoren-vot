@@ -5,7 +5,7 @@
 import { writeFileSync } from 'node:fs'
 import { describe, it, expect, beforeAll } from 'vitest'
 import { initSodium, getSodium } from '../sodium'
-import { encryptWithRandomness, homomorphicSum, bytesToHex, type Ciphertext } from '../elgamal'
+import { encryptWithRandomness, bytesToHex, type Ciphertext } from '../elgamal'
 import {
   proveBinary, verifyBinary,
   proveSumOne, verifySumOne,
@@ -13,7 +13,10 @@ import {
   proveConsistency, verifyConsistency,
   type BinaryProof, type ProofContext, type SumOneProof,
 } from '../proofs'
-import { BINARY_DOMAIN, ZERO, handBuiltDisjunctive, isZero, randomScalar, zeroRandomnessSumOne } from './identityEdges'
+import {
+  BINARY_DOMAIN, ZERO, encryptVectorWith, handBuiltDisjunctive, isZero, randomScalar, zeroRandomnessSumOne,
+  zeroRandomnessVector,
+} from './identityEdges'
 
 beforeAll(async () => {
   await initSodium()
@@ -44,16 +47,10 @@ function newBallotId(): string {
 }
 
 const sub = (a: Uint8Array, b: Uint8Array) => getSodium().crypto_core_ristretto255_scalar_sub(a, b)
-const add = (a: Uint8Array, b: Uint8Array) => getSodium().crypto_core_ristretto255_scalar_add(a, b)
+const subPoints = (a: Uint8Array, b: Uint8Array) => getSodium().crypto_core_ristretto255_sub(a, b)
 
-/** Encrypts `bits`; returns the aggregate ciphertext, the ciphertexts and the randomness sum. */
-function encryptVector(pk: Uint8Array, bits: (0 | 1)[]) {
-  const rs = bits.map(() => randomScalar())
-  const cts = bits.map((b, i) => encryptWithRandomness(b, rs[i], pk))
-  const agg = homomorphicSum(cts)
-  if (agg === null) throw new Error('empty vector')
-  return { cts, agg, rSum: rs.reduce(add) }
-}
+/** Encrypts `bits` with fresh randomness. */
+const encryptVector = (pk: Uint8Array, bits: readonly (0 | 1)[]) => encryptVectorWith(pk, bits, bits.map(() => randomScalar()))
 
 function buildFixture() {
   const sk = randomScalar()
@@ -84,6 +81,24 @@ function buildFixture() {
     expect(verifySumOne({ ...ctx, index: ctx.index + 1 }, pk, cts, proof)).toBe(!contextBound)
     sum_one_proof.push({ context: ctxJson(ctx), public_key_hex, ciphertexts: cts.map(ctJson), proof: sumOneProofJson(proof) })
   }
+  // Candidate-sum and consistency proofs are always context-bound, identity
+  // aggregates included: the challenge split e0 + e1 = e still binds them.
+  const addCandidateSum = (ctx: ProofContext, sum: 0 | 1, agg: Ciphertext, proof: BinaryProof) => {
+    expect(verifyCandidateSum(ctx, pk, agg, proof)).toBe(true)
+    expect(verifyCandidateSum({ ...ctx, index: ctx.index + 1 }, pk, agg, proof)).toBe(false)
+    candidate_sum_proof.push({
+      context: ctxJson(ctx), public_key_hex, agg_c1_hex: bytesToHex(agg.c1), agg_c2_hex: bytesToHex(agg.c2),
+      sum, proof: binaryProofJson(proof),
+    })
+  }
+  const addConsistency = (ctx: ProofContext, diff: 0 | 1, partyCt: Ciphertext, candSumCt: Ciphertext, proof: BinaryProof) => {
+    expect(verifyConsistency(ctx, pk, partyCt, candSumCt, proof)).toBe(true)
+    expect(verifyConsistency({ ...ctx, index: ctx.index + 1 }, pk, partyCt, candSumCt, proof)).toBe(false)
+    consistency_proof.push({
+      context: ctxJson(ctx), public_key_hex, party_ciphertext: ctJson(partyCt), cand_sum_ciphertext: ctJson(candSumCt),
+      diff, proof: binaryProofJson(proof),
+    })
+  }
 
   for (const election of [ASCII_ELECTION, CYRILLIC_ELECTION]) {
     // Binary proofs: slot i uses index i (ballot-proofs.md section 8.4).
@@ -105,13 +120,7 @@ function buildFixture() {
     ;([0, 1] as const).forEach(sum => {
       const ctx = ctxFor(election, sum + 2)
       const { agg, rSum } = encryptVector(pk, sum === 1 ? [0, 1, 0] : [0, 0, 0])
-      const proof = proveCandidateSum(ctx, sum, rSum, pk, agg)
-      expect(verifyCandidateSum(ctx, pk, agg, proof)).toBe(true)
-      expect(verifyCandidateSum({ ...ctx, index: ctx.index + 1 }, pk, agg, proof)).toBe(false)
-      candidate_sum_proof.push({
-        context: ctxJson(ctx), public_key_hex, agg_c1_hex: bytesToHex(agg.c1), agg_c2_hex: bytesToHex(agg.c2),
-        sum, proof: binaryProofJson(proof),
-      })
+      addCandidateSum(ctx, sum, agg, proveCandidateSum(ctx, sum, rSum, pk, agg))
     })
 
     // Consistency for party p: diff = party bit - candidate sum, in {0, 1}.
@@ -123,14 +132,8 @@ function buildFixture() {
       const ctx = ctxFor(election, p)
       const rParty = randomScalar()
       const partyCt = encryptWithRandomness(party, rParty, pk)
-      const { agg, rSum } = encryptVector(pk, [...cands])
-      const proof = proveConsistency(ctx, diff, sub(rParty, rSum), pk, partyCt, agg)
-      expect(verifyConsistency(ctx, pk, partyCt, agg, proof)).toBe(true)
-      expect(verifyConsistency({ ...ctx, index: ctx.index + 1 }, pk, partyCt, agg, proof)).toBe(false)
-      consistency_proof.push({
-        context: ctxJson(ctx), public_key_hex, party_ciphertext: ctJson(partyCt), cand_sum_ciphertext: ctJson(agg),
-        diff, proof: binaryProofJson(proof),
-      })
+      const { agg, rSum } = encryptVector(pk, cands)
+      addConsistency(ctx, diff, partyCt, agg, proveConsistency(ctx, diff, sub(rParty, rSum), pk, partyCt, agg))
     })
   }
 
@@ -151,6 +154,42 @@ function buildFixture() {
     addSumOne(ctx, cts, proof, false)
   }
 
+  // Edge (c): candidate-sum proofs whose candidate randomness sums to 0 mod l,
+  // so the aggregate c1 is the identity (and c2 too for sum 0). The aggregate
+  // is derived, not a wire field; Go decodes it permissively.
+  ;([0, 1] as const).forEach(sum => {
+    const ctx = ctxFor(sum === 0 ? ASCII_ELECTION : CYRILLIC_ELECTION, sum + 2)
+    const { agg, rSum } = zeroRandomnessVector(pk, sum === 1 ? [0, 1, 0] : [0, 0, 0])
+    expect(isZero(agg.c1)).toBe(true)
+    expect(isZero(agg.c2)).toBe(sum === 0)
+    addCandidateSum(ctx, sum, agg, proveCandidateSum(ctx, sum, rSum, pk, agg))
+  })
+
+  // Edge (d): a consistency proof whose cand_sum_ciphertext has c1 = identity
+  // (R_cand = 0); the party ciphertext is an ordinary wire ciphertext.
+  {
+    const ctx = ctxFor(ASCII_ELECTION, 1)
+    const cand = zeroRandomnessVector(pk, [0, 1, 0])
+    const rParty = randomScalar()
+    const partyCt = encryptWithRandomness(1, rParty, pk)
+    expect(isZero(cand.agg.c1)).toBe(true)
+    addConsistency(ctx, 0, partyCt, cand.agg, proveConsistency(ctx, 0, sub(rParty, cand.rSum), pk, partyCt, cand.agg))
+  }
+
+  // Edge (e): consistency proofs with r_party = R_cand, so the difference
+  // ciphertext the verifier derives has c1 = identity (rDiff = 0). Both wire
+  // ciphertexts are ordinary.
+  ;([
+    { cands: [0, 1, 0], diff: 0 },
+    { cands: [0, 0, 0], diff: 1 },
+  ] as const).forEach(({ cands, diff }) => {
+    const ctx = ctxFor(diff === 0 ? CYRILLIC_ELECTION : ASCII_ELECTION, 2)
+    const cand = encryptVector(pk, cands)
+    const partyCt = encryptWithRandomness(1, cand.rSum, pk)  // r_party = R_cand
+    expect(isZero(subPoints(partyCt.c1, cand.agg.c1))).toBe(true)
+    addConsistency(ctx, diff, partyCt, cand.agg, proveConsistency(ctx, diff, sub(cand.rSum, cand.rSum), pk, partyCt, cand.agg))
+  })
+
   return { binary_proof, sum_one_proof, candidate_sum_proof, consistency_proof }
 }
 
@@ -159,8 +198,8 @@ describe('browser-generated proof fixture', () => {
     const fixture = buildFixture()
     expect(fixture.binary_proof.length).toBe(5)
     expect(fixture.sum_one_proof.length).toBe(3)
-    expect(fixture.candidate_sum_proof.length).toBe(4)
-    expect(fixture.consistency_proof.length).toBe(6)
+    expect(fixture.candidate_sum_proof.length).toBe(6)
+    expect(fixture.consistency_proof.length).toBe(9)
 
     if (process.env.UPDATE_TS_FIXTURE === '1') {
       const url = new URL('../../../../crypto/vectors/testdata/ts_proofs.json', import.meta.url)

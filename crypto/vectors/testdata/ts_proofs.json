@@ -3,106 +3,106 @@
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "UHO52mD2fPMEFxMdKM0JM7YVq7LzlnkqMIGf9ary-VY",
+        "ballot_id": "Ba5rS9bgGD0oOTiMDWQ6oOWjavBAZ_xyMxNcO7XixFM",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "message": 0,
-      "ciphertext_c1_hex": "3620212eb3759ef769a20cbc7921b212a4b2292b71cafca9bd9da40f69ab8937",
-      "ciphertext_c2_hex": "646e7da2d9e37190229dc622c71d10fff7af642715c4d21a084ecd8cbe59707c",
+      "ciphertext_c1_hex": "d412fa02283d24f2070c4246eaed47a0913405ee562b26569433d1c8f9353c41",
+      "ciphertext_c2_hex": "28dd3150d6abc689aa5a92ab9d56cc71c699d939fd8059fccd007fb05f8f455f",
       "proof": {
-        "a0_hex": "68f37a564a2b5fa78495acaa4158f9e750b42906bbab40e10aebbaadb9337136",
-        "b0_hex": "487bec9e0690d7c392adb8513b654ca797792adf26214a0b468f0dbefb1dd136",
-        "a1_hex": "16c7552c05a3b0036a33e5f94fcd6cdb8d0c1e0c237e39a8e23583a6f76bbb00",
-        "b1_hex": "50d1c8be26a215c5835ac231a483be41cb1d01b3854ad6e13bb3cce9ee3ed84d",
-        "e0_hex": "fa909a5bbba7c6251b062d6916418147d952d6c259ce2f15aa6a4e11caef620c",
-        "e1_hex": "6c04f1f64f1d72143db48e07e87a2da4aea695ee70b74a970ac269ff31c5e300",
-        "z0_hex": "16f5c44561883f6d80306f063d4fa906d90ef530e9e60981e5ad020cd93add0b",
-        "z1_hex": "43bd80e6d98b805994dfda751d2de80b5a37b34aa60f876b0d3db8fb84b10501"
+        "a0_hex": "b8a0da04c021bd2b81d409f05d2edb0b34b4f0fbcfe4744afa86441188407e4a",
+        "b0_hex": "4c5d0d11053142543f708be5143c625028c6c68a74f1ad74bad68a383772dc70",
+        "a1_hex": "4af4d618b54eaa1fd0c601d90ea092d0a6e987dc6b19bf3d02e2643fae4b9b65",
+        "b1_hex": "de2723ddaed464a9d3dfce1d92ef4fc681ab668c892cd7d28e50017f87266623",
+        "e0_hex": "7cdb59144aeaeae4c0f4e056801c2dc4a6780f7efce6d512be498c8892f7be0a",
+        "e1_hex": "87fcf7b1836008fbc014b1f183ada5f046be0e0c5fceb63456b4b4d36070940a",
+        "z0_hex": "d8c1acd69dc627e7321f866bb58e29219a22c888a0e216ee93c4026887661601",
+        "z1_hex": "6419c0fe175e28ce56ffd6e0067aaad52900c55a5ecc97a2ae4e4e2bde79d008"
       }
     },
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "8jrjq_vXT2q6tkGg1H2_xAXs9xLj1ncMLD4_s1mDS8c",
+        "ballot_id": "aOfddGePPkaCCsZ_J0EbV14r87iks07KR1ze5WiJXA4",
         "index": 1
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "message": 1,
-      "ciphertext_c1_hex": "a0517764dc6141199a13defa5dce38ad5f069d38d8fb0301837926dfbc737e30",
-      "ciphertext_c2_hex": "5ae48545e1b050dae1e22ce6ef24835f196e5722524ed56af93040c7679d0838",
+      "ciphertext_c1_hex": "f0a7e90b96c2dc9eb4a917ea43395cee77c320679707962501715f9bb93a353a",
+      "ciphertext_c2_hex": "c8c1ce295797344a8b836bb83c95198fb84ca8c4cea66777f1cbd2def1faae2b",
       "proof": {
-        "a0_hex": "14a22f0923e38adaf1c998fe5bcd781b03fdb55fc31f947bf253bc97b48bcd65",
-        "b0_hex": "66d8d8c6f4662798a08132fa21d7674651c55afb656f79ce572a9543ed235d03",
-        "a1_hex": "d05c32a11bad625d3491a1e41809e71c0be60b19e86c7dee497d1a474dca9735",
-        "b1_hex": "066921fccff149b41a8f8cd91a4dc442027428861dae1a2f7dc42b70d52dbc2b",
-        "e0_hex": "37869e6456d24513e89abb24670aff7f57b99b5ab03100f23d4507ddd2014e0f",
-        "e1_hex": "29993387cabdc7380fc53c3c19f6c6e8020d78f127f4453ac87e2660425de704",
-        "z0_hex": "6c9a62d15b7b9e6ec1ed80ea439a0adba6cc41d8b2111a06bd3878a571857e0c",
-        "z1_hex": "0754876cf672c64c2be6dac3eb0438f2e5b691fe03af7569749091e7f8ffda0f"
+        "a0_hex": "342c1b3cfa95c7c1c894f0466d60488634cc0f98859430237885ceec88e84834",
+        "b0_hex": "588fed2780ad45e40fa09c4902d10b895b55c666590d138b45f2da338df8311f",
+        "a1_hex": "fecbdf2207122f23e762774a5eab8f917e1edc109367ca9643f2b4e61441fb33",
+        "b1_hex": "4cd944ed64ec5dd9181ba67e965957b059e137a601af56a26e7ec71b3253767a",
+        "e0_hex": "0a4546385aafe6d85b3625558d384c843ae1602d8d0989dda62f62ea0cde0f01",
+        "e1_hex": "f628a5b31ba0f5aae7f1fbcda51a2f9f433f9cb6cc6cd62b6929917cb7909b01",
+        "z0_hex": "8fb5d228b0325897414ae8b2650279cd60970c51b3233479bbcc34c2fd3b230a",
+        "z1_hex": "51f58e69598d0ceb090fb5c83d593a857a1b8c06b829b355180ab946949af300"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "zuvjAjvEfaQFuHeZvSuALlqSTW27v0Di0eLqo_hL2SM",
+        "ballot_id": "MdTT39A1HCD6Pgcn_27WSgYRvzkYldxogE59V8CxpnA",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "message": 0,
-      "ciphertext_c1_hex": "4acd57679c591eacaacf09df2f8373684c5ed02b850763c8b2b4aae32b69d669",
-      "ciphertext_c2_hex": "72e1cb2117162093198f7979b6c752da456df991c71279d85a7a981340d60872",
+      "ciphertext_c1_hex": "ecffa9fa5a993b66119dcf30a013dcfc49a8ad377db67e59bb590584d727234c",
+      "ciphertext_c2_hex": "1876c83549fa3eab8c41458789c1d55ede559f84fe072c258aeaf7e113236914",
       "proof": {
-        "a0_hex": "a698043c930248432210767cc6105ebe43bed15c1a43a90179296ea50d7e770f",
-        "b0_hex": "987c87c3e21cfeee120353f2555de0e4c79ce76e50d45de0546eca76fab5986f",
-        "a1_hex": "8804de09f5efea3ba02a54708f98ba0ecc37018751b817c0a5d30cce5632c233",
-        "b1_hex": "8680fd52fafcdecf6846f3c97811331b45d7bece821fd202e32727ce1b68ba1e",
-        "e0_hex": "25ecdd5a6a3904f261e326aaa3e82a53c7aa1d983da3d161936f49623b3d1903",
-        "e1_hex": "d7950de92eb56a89ed47ad2dcf96d57ac0798edd57fc8936dc1ce9e18f98f603",
-        "z0_hex": "5bc3c89250b0a276bd96646e71d185ac3c39ed3f6a8542f389425278eae8a80d",
-        "z1_hex": "6023468d2c4e5c621d1407f7964e2e2a1c700a58e8f29a3bcaeadc0c5687000d"
+        "a0_hex": "c476e3c1310661305d9f6a8702093e8de7b3cf91163697913f7b206754e7883b",
+        "b0_hex": "70a8e7b1afcfefcf0270b8614febb15adfc5fe248669cbfefadb321fd6c48809",
+        "a1_hex": "18ac9e26f095fc7cd8474cde9efbbd3949a7050dc0164719920c662a2ef7020d",
+        "b1_hex": "bece225de748a54732d7e36ac8ae7501b532908f4e8ee7a380b0cdce76fea728",
+        "e0_hex": "da0139d8055083c752fb5a5f7efab7a78d6d8229e77af0c0529b61e4d2f90102",
+        "e1_hex": "5e36a7a1e5708b8320996f9c8e6a6b102279b6191d5aeeaac7c9436e81a67801",
+        "z0_hex": "1a3dfc517d8fe03f7f880a3e71bce9dd790e509868e2ddd36303173bd5800f00",
+        "z1_hex": "a87602876422bf9915d99681ca674b10163ea4ff857df6c17558f87e31083e05"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "DM6hhwByppBAyrUTumBVOJBoSSeSoR-LrkRSvAJ7r_E",
+        "ballot_id": "jZf6G7Ei4g0O65oET1hZOsLaOiWtYPt9jLyjtR12s3g",
         "index": 1
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "message": 1,
-      "ciphertext_c1_hex": "0888eb6ff710d6d08b5998f0d34ec0329ba2d21d530e46a2de7276bf3ca66e3a",
-      "ciphertext_c2_hex": "027a9c1cf116f7acd6e4ea4f2bde46174f2c5a30d0c678764d6ac6aa7cd6f73d",
+      "ciphertext_c1_hex": "2c61d523717847598dba4a23e235483c2c70715a3d3e38a48928fc7415d99927",
+      "ciphertext_c2_hex": "441d61ff4b2af59752c94c2b7267bad57467dd02dbc03d56e26a820cfecbb52e",
       "proof": {
-        "a0_hex": "6c8ceefc371bd045a5e09ccc92c7764180e7355be507797f104b486cffadb93f",
-        "b0_hex": "ac0a482124b91cf7673bdd1cce032f89dc08f667d441ad3d04af451fd61cf37c",
-        "a1_hex": "08a674f3cbedde8331a5c28531c0b2a29dc6a8541f993a7a06cc11003bc76549",
-        "b1_hex": "881624f1701dad702f0ef5b71fbefe0bf7672f6cb825ecd161a790df6dca6c53",
-        "e0_hex": "6761885024a2a81cbc8a6cb305e4a4f802eccbcce557efa07ef1296af3bdf305",
-        "e1_hex": "7ccc58fe27de3f3af88db297661d6e6beb7d5c8c72cc118f90ab3a83a0e4fb08",
-        "z0_hex": "7d39244de89c2732031d66d0959a8a5fe0cd8f38b33b87712372fc657a463b05",
-        "z1_hex": "26f7309de35cb89c97b4057ff6d7bfaf82ba8bd2125bfc02d233437e52ece50b"
+        "a0_hex": "601bf5fb387c9755a04d56ec400183dd38da32a690b3539e72f6368927be1447",
+        "b0_hex": "6a27b7ac7c415463bf21c8162814430b451eb1308df87864aec720751bb06a02",
+        "a1_hex": "ccb38400eef3c99ff679aad80ecdb7d660f8ec814c8ac37ff5dba2ef23dfa80c",
+        "b1_hex": "38fbc81589dec2b7737161106cf4594263898c85c507ab9e3bae779dfb475f44",
+        "e0_hex": "30d342e39a730231ed5623bf03080fed28324c10c64ebba32065d145e1534f06",
+        "e1_hex": "00b3bab8912e33236113b0e89577a0ca2fb57b53e7c0e23f18f81d2be8b69005",
+        "z0_hex": "bbb4bb9085e6f10bd08a2e6048936d71e5b9cdcbc28ee20655bdfd92cf947b07",
+        "z1_hex": "0dc891208368163a7f796d973ef5f784adee9c9a051a81f2ccaa14136f44c801"
       }
     },
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "YScMNwpaNCiu63xJZiijEZ2kRpEEJg0qvfAR33XY02U",
+        "ballot_id": "KiH9bIYWaiSir55cUsSHITI46yDOdd5UhAnLtnuKaiA",
         "index": 2
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "message": 1,
-      "ciphertext_c1_hex": "8ce2154a3ce08f808567e201bebc7b39df369a0809a343040efce3b65fc2af25",
-      "ciphertext_c2_hex": "0a11876e08c51deecb0d40b8bcca28d554c2a5e34dae394d0053278e994a831a",
+      "ciphertext_c1_hex": "22ceebf1a735cb97a99ce3b371ce2b59ff943afbf529beeec690c3c72bd54859",
+      "ciphertext_c2_hex": "eccf8aee4760c6d63c8c96a1bd8b95b1ade352d448fd0ea3ff91492a9670443e",
       "proof": {
-        "a0_hex": "00694761b7b4613040cc0e7711c9e5a94b8abbcd0d35cb312e86e64b895cde6c",
-        "b0_hex": "e6bad0d38dca0770898df55f68291b40c0889c63192352557fe9c33ed6935d26",
-        "a1_hex": "b85fa63a7b0659fd20a61812547640ea3a1f2c5b344ea1e29a831ff6266a3c4b",
-        "b1_hex": "e4db9268a6c9b7cf652ee420a388d4b3c6eb5cd2a438c7258078193db6ba9b46",
+        "a0_hex": "d2a1ef4fee58ba3eec56525fefa92bd9c2622d866954d35b2a7dca566f52a369",
+        "b0_hex": "705209df745893587e6a8af076425e8c5a883cd9c5aaf65b7824b56008bae620",
+        "a1_hex": "84c1e4cac4cc41c35572ec274500a39deb89b4d047f9749e1bc07d98a312d57d",
+        "b1_hex": "52712daf64d1d009f28bd347caab5413151d216b7d71196ae6d91f9ec33c4b56",
         "e0_hex": "0000000000000000000000000000000000000000000000000000000000000000",
-        "e1_hex": "e4046963c7755bb7377a14d7a3874b5a029c54b33056f5dcb52ea646b7f27703",
-        "z0_hex": "964800f5e9a42127e0049cc7ab709ecb6253a1963829043a5f35808b1c32590e",
-        "z1_hex": "56d858536410589a1c2e45ace4187ceda7efb972f32fd2d04d1a62b1554ac500"
+        "e1_hex": "9b2d831ceae1798fee27138999f69102a5b77317dc7109bd8bcc0a6b6b38df09",
+        "z0_hex": "85dbea90e59816d7521f6c569025562c1e049b87361cd8295a29152d079aea0d",
+        "z1_hex": "a195e354dc4caf33fd2ec7df9a69a69a5268216ab34d3da8835ff1eb2afc7205"
       }
     }
   ],
@@ -110,82 +110,82 @@
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "BAmGS2BRwIbIu5xMwSY2URXTa2ADsMODKKtqzz1pSb8",
+        "ballot_id": "M2gfi_9z7isLKH7hx5mQc0_x-jr3Bfk-b0jA3MCXndE",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "ciphertexts": [
         {
-          "c1_hex": "e606629f88777f730a91f24c888e21a48c24d3c978b828fa027a3177effa5a6d",
-          "c2_hex": "9e39eb3d32c22bb7024c4d171a5de5ceafcbaabfd0cf6fb68f8b0dedaa1b2b7e"
+          "c1_hex": "b4445e59f438591333cfaa54464c4bf045d3d58b575f0cdbc828355b79b7d26f",
+          "c2_hex": "cc4f8a81b73b32ba9076d405974c8759d3aa05cff39c689a1f9734b434c46b73"
         },
         {
-          "c1_hex": "6a6a6b7f53e860068053f898e45656a4f8be7afe34ac47475550bb9684049204",
-          "c2_hex": "bc7b4c072059929edf537d1f306940b9f4a472571581e89ede5daaa65af39c35"
+          "c1_hex": "1c0ef3190afd39be31fe5a7138a7dba21e3e1fb609c2e954a156ca3abab96e09",
+          "c2_hex": "0cd7ed48e30ade8b9e9a98b3c96f2aceccb85384e5604e9cfa284614d3d4885a"
         },
         {
-          "c1_hex": "e8beae0e41ee0e6e22dfc599e09dc959ba89c9e8548db4c833778687430d3e42",
-          "c2_hex": "8ea80bfe4b45c3e0657557b9930889b22a883526bb8c51e31272edbad09afd6f"
+          "c1_hex": "62bfdcc884b405756fdb8efca80d6f6a380f2ce05b1d999a37c0fd162fd7a42c",
+          "c2_hex": "d6bd4ced070378168368a4f4775045343045b04ecec0717d4c36cc42bd547d50"
         }
       ],
       "proof": {
-        "a_hex": "b40895718548f170b99023fa86d1daaaf019f4a2cfa3a88a7062387132d7ef7a",
-        "b_hex": "f20c34af9f7aa341ca7d1a9bddcb5d37c28171b635d76630e2077560e58f0b69",
-        "z_hex": "8732c83d6f3644214c5eb7327de2fc6bebbfcfd994583586082a8b446f6cc00f"
+        "a_hex": "103afef8a3a72f78d358f2c26364359ab46219a682905ea7a1c07a77e188036b",
+        "b_hex": "7ee1286ca39c3d74cd3717b6fb59f7eb917c3992c5870e0d3618d9688b22c949",
+        "z_hex": "0b7961046743a1ad6c6d161115e39e15a68bdf93a7443b72be19ac2bcb863509"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "Cm0z5-wpikDl9iW07GQyNjFfrLUBd7-pM6LfMnZYxaY",
+        "ballot_id": "mHrU5izhuQFNvWRhKQ6H9NpxHEhnmOpQ8l3H9X3X9sA",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "ciphertexts": [
         {
-          "c1_hex": "1cb309fa0ad90328427a753513feccd91589f54e5513eaa62d33be5139623077",
-          "c2_hex": "14713c9e69ac51dad3c786d3d92616920d01326030769c43d0f3cd17dba6f013"
+          "c1_hex": "d45debd6f5e35c1880fe14be18d32944e58e139bb4b3938ef7dfc9c9043d0253",
+          "c2_hex": "f0e40a343da392bba8b5015a7c92023be540c79291bbf7c13b3603bee2dbfd01"
         },
         {
-          "c1_hex": "dcb556b25e5f81c1b967fed44e3c33fda00c65637ebef96583b5ef113255fb32",
-          "c2_hex": "6efa1f97e77aa81be56dcf626d291bf993c20cf81f8a70f93598d788aaf5c478"
+          "c1_hex": "24a266f3743480ea58b3b064d3d1e35f922bf21fcb45dd66bc6c08b9dce30c46",
+          "c2_hex": "a2b80602c74611064c9b1b4211e02571cc722ea30f3b7483473a2bb396ae6337"
         },
         {
-          "c1_hex": "e6e31b76fbd2bd731213c7da85bf25a6f53a554cb8ae9a04613c5fa17b1a8430",
-          "c2_hex": "5a438b81f373e81121f49d4c4f9ee2e36223d8b89c59abeb0ee1796067a47825"
+          "c1_hex": "d6abe12f4f9e8ff12818316a0b845d188dfd3823a13eef400b1caaaacb3e1b07",
+          "c2_hex": "ec0279966d249beba6618c823e7d266f647285311c1127c91230403f09a7583a"
         }
       ],
       "proof": {
-        "a_hex": "bcde4dd25ddf884147260fb4fc023150b33b30cf0493f2ec1662fe149fea443e",
-        "b_hex": "2e6db3faca0d582180819644257ea92e80532e29cd6ceebb18537c9db80ee36a",
-        "z_hex": "f1a67cce6e62ada48dc33dcdbde5ee62aca3b1710e9641c12c315b41b84d1706"
+        "a_hex": "387c2bd92994a94d99425677eeed3630577bd5bffc6200de844dc52de538930d",
+        "b_hex": "aabe08b63d65cfdd6cf300831cc3ece8902cb48a78c93d82df6c54f037c90330",
+        "z_hex": "f24d152ce0a6c2762f438905849c520f5bcf5f89a1a3b3d47399165b71652c00"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "RGKbLfBsNtmDO1HB0J9FFquknqC5XARNk5Zji4hfhmo",
+        "ballot_id": "PqktSUhh9Z9yVcaf7shzlN_Mxizp0caTx1daC_T1nzk",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "ciphertexts": [
         {
-          "c1_hex": "8e7d3c6ab8589ee20e729e921b76af14157366600529d30900f137abdabcca4b",
-          "c2_hex": "bcf1fd1e0714b485d313877eb0491a3e40b644a5b77793400635d6bd3ec16b4d"
+          "c1_hex": "b25eaf9ddc3057f28339e90007baf9472cde9ff165c1a0bcd42178d9b5868135",
+          "c2_hex": "688b80c5dc0bb2f743a913284f175c0346126960871c2073e7aa413e07c2d85f"
         },
         {
-          "c1_hex": "3c8e58d66d1e415fd9080f569a314d98fa138f00090effb17a7da5b4ba8d185d",
-          "c2_hex": "0e61437394c2ee3b178144fd170a951ad2a02a13629269215ec6a860be4afc3c"
+          "c1_hex": "4ebe9d24c7f71b2a3bb8d00f99e84d8f02a0675d96258feddf7f82248517e864",
+          "c2_hex": "5856bb76b516d69b35676ebb00d250bf182554978af0d65b50a4db180528c52e"
         },
         {
-          "c1_hex": "aa1a531c1f62def8c040d0528b62909c7c5cc8c47c8bee4559e3d002e4d65c01",
-          "c2_hex": "46f9d36ec852ca92ccb2ec1fa00db1d86b3e80b295fc80016e868f8319082651"
+          "c1_hex": "c67ba0354ca34f5e6faeded4260ecca64b314b8d0e4cc48708a4021ec356902d",
+          "c2_hex": "2e874db5880f77f2ff50c625dd8866bda9dcad30617c54d0d784d57e3da82c6d"
         }
       ],
       "proof": {
-        "a_hex": "f296b2a94192fbeeb8120b9f7909a0a85f7181ea3bd293ac56aa547343fdb837",
-        "b_hex": "02f29a4d23c13b1c0770660321b977d91e962abdbaa94254f45ba4cc86759832",
-        "z_hex": "dce2c0d72cdf181f4540ffa2bbe78339c59f0d7855f82038dc3edbcaf4392b04"
+        "a_hex": "6489c0cf2c27add11c12a040ac997be51f7a7478a8391d6ee0258136d2d28526",
+        "b_hex": "12b200c3a7656289354c4b9fd9f9637320514f7ad74f56752145e7c1a2c18664",
+        "z_hex": "c22b008a076e41052f6eec0c290c9b79a0eb9341ffeb8f3f3456c12f465bba0b"
       }
     }
   ],
@@ -193,85 +193,127 @@
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "VvNlvVu1Yz8xKUI4KRWmkUi4pSbJr_bq3pHtdx3CTno",
+        "ballot_id": "v6VCq4K6j376Q-PW59AV4ZAmCenyzamgznnK4_qpMhw",
         "index": 2
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
-      "agg_c1_hex": "1cf46a145333dac9211098ed492942d11c05bc6600afe061a27bccc2e6e6744d",
-      "agg_c2_hex": "fa680e06da0751319f4ee635cd84cef487708522bd5b9745cacc50ab62260b3d",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "agg_c1_hex": "8c97e5788be7efe96006882499834595027878930a15c400ef885a44ecfd234f",
+      "agg_c2_hex": "b60f92d033730185e4358da6b8615bef4349334e52c9b9e4285f4a6491f26302",
       "sum": 0,
       "proof": {
-        "a0_hex": "fab37766863baf2a1ce1c559d6691d37eee992d89669c72d2c72ec8b5c74747b",
-        "b0_hex": "e8700d15370a8b867720c1b6a0d2f998d3a985a9dfe8e80b3dbd29e40f505066",
-        "a1_hex": "f8e1c3e0c18c5a15baf0a879cc68533fc2c501fb81890a81febad8688576aa4e",
-        "b1_hex": "84b32b878eab0c9f82e8c5a6bc7af8093eeef8681a741168601fb7b906b35c3b",
-        "e0_hex": "91f17b0ddcaa703cdd6f1cfd2553e26434176d4034cc823e8a7bf27bf0cde70a",
-        "e1_hex": "280c10a26cd7e86f0b580009dda7e650d212354388ef989131c8b117353b900f",
-        "z0_hex": "8b93a2dbdba361e937255917a5fb7506775d1d8dce0211df02e37a7deb08eb0b",
-        "z1_hex": "5635ade8b6844d8fc6ea5dc6ef58106856cf4f3b249f67572dcc07ee6244c007"
+        "a0_hex": "7ef2b0ddedd6bc63a2b45e0f199f5b6ae4f5d162ea8b8a411f7aa6e11473702a",
+        "b0_hex": "90759d39bebc81575179278869159ab88e7d04de06cb66f706efe5f338eb2744",
+        "a1_hex": "7036c5d14267e2093ce66c2742be7c148e16e14e37f79661adec7acd2aefbc78",
+        "b1_hex": "362cb4b916bb4ccfbc7f44959d150a626fb14ebf6124fe597f62d7a60a39202b",
+        "e0_hex": "6dc394f9f751efde8bcd1e84f6e3d0400e016258636c03847c1e42b983b8740e",
+        "e1_hex": "28c79d2f95e184f385d485c5fbf6461b1ce29cfbeca33b88fa0b02928b2c3603",
+        "z0_hex": "5ad6e824228f451241b86bf6baaa14691f4777b092fede22efd736b793e4c40f",
+        "z1_hex": "98ec553e837ac66465180ff6c3aed844f238c13743d67256f757154d8701930a"
       }
     },
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "o6qloA-IG3CYUgLkPScZ9liNZ-Jj8n9L-_clkFIgbaY",
+        "ballot_id": "Ho8cg7LUcks_FWJxwgDUbtv8oW_GxDE-mfImM2Nimf8",
         "index": 3
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
-      "agg_c1_hex": "6a76d0c8adf601281a6c7e228f354288492336d538ce467736388f0137fde841",
-      "agg_c2_hex": "2a13ccb6909c82835e1c44c08ff68efc799e1d8ee28881ee2eea40b68681bc27",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "agg_c1_hex": "7e14790ec911d09bbc8f254c666348b28f9c58e26f26df1b7967834d2fe8bc2d",
+      "agg_c2_hex": "b05a55c56ba6a57980e605266aec0e5e31d4b82846847c2355abf623e99eba50",
       "sum": 1,
       "proof": {
-        "a0_hex": "3663ca082bcadf1329d7c3aacdc6f2005ce4dc2d60eada9451547fd31f3dd572",
-        "b0_hex": "e48bc295e3d67b87c5d09678dde788e8523a10964764614811e0c65dffb5b572",
-        "a1_hex": "702ad98a29c4c2bf7c76c1cb0a1503f325713534b96fc9902b7448444a08ec6e",
-        "b1_hex": "f237007a4ac9a1158c4d230664e1ae4e23edd46c629095ed78d2fb76b2146e0d",
-        "e0_hex": "7b8ad6cff094b5da8cf2d6d224fba88aa1a17cc3072a1375932a04960aeb7701",
-        "e1_hex": "f779d3a4bfa5085ce0314037d02436c27b3469efa8522f7090eeea30c5c40a0e",
-        "z0_hex": "064cfe722fef7ab8808c88fed70b5167ad1a7d0b871253c0cdbb2e340f3a460a",
-        "z1_hex": "10d06be74b08aba7a604ed21da3187946725d1d06813bd09c3d9a8207dcb4a07"
+        "a0_hex": "ead53bd1e201e69b429dde47211bec340f3fb2cbb62261c6a95c0cb0e67ccc00",
+        "b0_hex": "d29119e4f2dde4c2072c7f6b162525b3d83e98563fa68c912c02330d66301208",
+        "a1_hex": "6e53facbab60918c0e76c7b1abf4d6848b5c8e1168cfbcf03d2f5f388f8c7c78",
+        "b1_hex": "fe4d9f5010a46fc399692c82d64d9109107afcbcfc6cec60b1756957d705fb71",
+        "e0_hex": "3f35ff3e9cec27afda98fdbfc5bf7dc011f537d197aceff92730e1d9113a3409",
+        "e1_hex": "869869c75f27acb8b18737d0fa24e71ff46ab5e9d2f810fa8ef0fac334edb009",
+        "z0_hex": "ede759ca2fa12bf2b2c1e03c412d10dc705dd5ef8bcd0bacb5ae5e9ee9b8eb0b",
+        "z1_hex": "443bcf0b6ffcd24ba5498c3832f5d9961325182c48084f0826efe86e47dbae0b"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "chtPSSa5jeMWZ2HKuV-S24J-NZ2974YHE7G9x1u9qFY",
+        "ballot_id": "szy4yhZls1FfBZzNtlG28J84Fe8Qw2cEab9ZTu_pNzg",
         "index": 2
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
-      "agg_c1_hex": "028bc6b0b568e4a3e2096fe9670163545178b4e47bfb47cc9a4354cb5c03003b",
-      "agg_c2_hex": "2a66243f93156656128801f397098d69303f6aad0cec21511396ee0526a7e35f",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "agg_c1_hex": "faad09b55aaf652ef8f8da692d6c61c1e48aaa6d7199eb15058c0c05646b2605",
+      "agg_c2_hex": "5280e36f6b882534bafad046802d88701cbecda30a1d307702e4886a6a363a6a",
       "sum": 0,
       "proof": {
-        "a0_hex": "bac49e9e9c2d792ad55b97a9124fc5c4901659cc5550defaa8819d8d14b85a7e",
-        "b0_hex": "54899687934b43e0f7536ba0a8a015eaa24d4f4254c56d35d32b7171e45d3553",
-        "a1_hex": "e0b73a83feaedf3f711d6ce920471799040efbf9ee60381ac963a1316a7ee372",
-        "b1_hex": "1e2b6ae7eb2dcf1054af2577259e5d2f1546e76ab6d0228f8a851b2c5881e77b",
-        "e0_hex": "37c075467ac8062ced6235f835ef7ae02cf511fb27ec55d26ec70285582aea07",
-        "e1_hex": "b3fa4d6970dd26effaec6100a661f3216e53a88ee71b13e2e9c3dfaf95cb0c00",
-        "z0_hex": "7c962be4681dcc10bf7126d0daa3f18dc7d0123ec286db45552528490ba1d005",
-        "z1_hex": "cc9d8daac55668bcb5f37b2983cbccc944d1ede3827d7280e92ac44b5cd5160c"
+        "a0_hex": "da822bc2645faef037883d343e74f17296e5323280e7f414770e8fe283335360",
+        "b0_hex": "1872155bbc09c7f17811673b4e9ce2b9ad4ef1cf2c728127b94df007a763017f",
+        "a1_hex": "66fe9c6ba2fe2bcdc8c82e2d06b36a41763f4b2bc685c2c5fdb495dc5191a327",
+        "b1_hex": "fccb7f831a3a372a794ba4432eb2dd0760a13fa07b6c6ba8cbba166c17cd8900",
+        "e0_hex": "9494e8adc4e99df116a3c42d06c33ebec297624a25d23c3f5c4b6c6155812805",
+        "e1_hex": "5862c69c8671e2c0bf5fb3d3b0de05a5f4e3430649e1b299b61d85834ec56904",
+        "z0_hex": "2a8139e7edab67b04adb6205f24ff103b5fbcc9a1d71d5d7b80848a6a647e101",
+        "z1_hex": "3da807a6cf64e807bd589b47147a3f4a650d098aaa9b4d88b52fb84a473f7c00"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "lQ5uUsngRsI-vgfktEt5KqdqeXTxGtg1uz3cJE0YfTc",
+        "ballot_id": "LyAzJ757zdZJDMxOa8b045bEEZdUi8Mcv3WWin0TKuE",
         "index": 3
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
-      "agg_c1_hex": "96bfcf01e48f22249755d8f7dfb546ccaa1fb9d96924f171ed3dd1ec4e74ea77",
-      "agg_c2_hex": "1cadaaa631c0b6364843cc9f454e3584ae8cdedd8adb01f2c3cdc8d30fe59668",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "agg_c1_hex": "f251c8617a4fc29425e6ecf14ac0c31bfedc83fed9d82680219c3adf8e115a2b",
+      "agg_c2_hex": "5e2653f0959942fd7cebbbbfc6d8bd6ac91c45b82ffac7d8a9b27c3e46cdb757",
       "sum": 1,
       "proof": {
-        "a0_hex": "9a9c2f4992a98933b7d511d2b0264b87f684aae97d35f363097877ca1694df5c",
-        "b0_hex": "d6e065228a40b2426c2bc17b3d5008c830e07e414d944a295ceb6ec8e5284758",
-        "a1_hex": "f86bdc70d11121272e7b82a8f0cf351f6e832e57c878a9beefbee88320759d67",
-        "b1_hex": "3237973bc09d1f3c898518e9f2b0886b9c53c3ef3b10217575fd045f1268ec62",
-        "e0_hex": "3a46e65da84f17fce16733e0ae7d76d0d28ca2372ed26be9bba4c6a934006c08",
-        "e1_hex": "0609175f050eb8e4551b7ab7b34433882591bffe23b6be5c3df48dee7397160a",
-        "z0_hex": "4c5aa6896b2539161c134ef9e08c5d1a3632027280c51c1c178476b98cd79a0d",
-        "z1_hex": "5148063370f71a3725918341f9d0e36adf51fcf2a5860af862beb5e024b5d40e"
+        "a0_hex": "1e343c88498b1e5c6472d20b05d0edafa2a3c66d6cc70d6c5b36d883f01e3239",
+        "b0_hex": "fcb041b6e88bf1cba5289321416d367c229131fccd4970b6b3e944b0084bc94c",
+        "a1_hex": "9ee4744452fda387c81daa9fee8c60baeda400760668078038f3d793d1080577",
+        "b1_hex": "2e1514c4dd947cf1e89afc58bf0ed00a5e6347c0550fef739af573a0f6f9e813",
+        "e0_hex": "54d63966e463cf20a8afc30b60b8a041d805e8085d942ffd47efe6747d33880d",
+        "e1_hex": "49e21e278ed9be2f0c2a776e81dbc6a0cdcf75ee56916d7cf8473d00e0e74b0a",
+        "z0_hex": "f16dceeabbf981cd3cc4134b7a327e4c50adb1a7d9941e8e5b0acca7c392380c",
+        "z1_hex": "a7867ae23f1a4a17df4b25cde5a17da3f9e123ea5bf5360fb8d4a9579b780f04"
+      }
+    },
+    {
+      "context": {
+        "election_id": "election-2027-national-assembly",
+        "ballot_id": "IFQzyQ6H1u4-rFTP1SrV7bs6fDMbybUo6LPtqxe_Mvg",
+        "index": 2
+      },
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "agg_c1_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "agg_c2_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sum": 0,
+      "proof": {
+        "a0_hex": "5218c0f188299198a41fc95f9a49f031c4f9d24f1dc9aa66418176940f0cce27",
+        "b0_hex": "86af10aa10a9fed906d74e7b648919ea520f22cb4be6bb06ba20349764cb1710",
+        "a1_hex": "dcb2dd8337d150db9520bfbeae747772561585c8f3e59e70d570feee91ad2678",
+        "b1_hex": "0ea3831a8240b1400ec5438f12656c5ff6225ccaee4af6980e11022fd9fe9b48",
+        "e0_hex": "ef41cfdedb5f6aeba482a719f02c443bc9bcab71d3386a608eee5e1165ad6300",
+        "e1_hex": "6a1dd349b821a7f4ac3643b77d21549c4b0b65a6af208b9307e451af2124f002",
+        "z0_hex": "2797e39cdb65f37b1df0858be0de3071c5ab0332ae01b6c1263a006ee9edba0b",
+        "z1_hex": "387de17a7a277b9666290051714857690bcf657ed3403789bf77de3eb9efe100"
+      }
+    },
+    {
+      "context": {
+        "election_id": "избори-2027-народно-събрание",
+        "ballot_id": "iJ9d_f_m4LVZ0uPHCTCgNvt8RdsLXpjR6Nt32d0-Z94",
+        "index": 3
+      },
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "agg_c1_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "agg_c2_hex": "e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76",
+      "sum": 1,
+      "proof": {
+        "a0_hex": "e8ba0a175230a7018aa78cb814d174e0c29727d291547572409cf77a83ad6c1c",
+        "b0_hex": "bcfebbc75112fecabdda82464b61e6b17283b016e642a63e75139ef8e12edf71",
+        "a1_hex": "1034de6fe52d9e27ebfc8cf4fd9264d2b1cb3317c7b4d145e7cc0c8eee7a8943",
+        "b1_hex": "4ea3309a16bfb0ddcc05f677516d18bbb174e3b8552365fad00ea53361641b48",
+        "e0_hex": "e4cee6871bad6dca193635e8d70b332119ed958d1d26bfb5574a1928e8433e05",
+        "e1_hex": "bc70dc4a174814e1cbb55aa5a59e25493f3295c7157e00fb9495a9cca14fa00c",
+        "z0_hex": "4881ffbac017bd9513a95614b3837e58f97e325c7a89da9c6aebfa63d291b505",
+        "z1_hex": "cfab4fc2d80e719603dc9565714511eccd09ccafd3eff78dfdfef2f9f8f2cc0e"
       }
     }
   ],
@@ -279,163 +321,244 @@
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "V6Y5wx5_mh9Bb-Z6dhp0-ZCcPb3VwB-NUKTuVAtY8SM",
+        "ballot_id": "sbFeXNQRIkqNNNhbhU8ibptQZJJy54nlmY303xf5uMI",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "party_ciphertext": {
-        "c1_hex": "04da1a43124f89e7e4bcbf93acb2ff2400f342669053847fa3d6ea2b21774e3c",
-        "c2_hex": "60f176f58722520ca654b6791fc7dd29775b58e322f47b6c44a17924f7350049"
+        "c1_hex": "24102c5ae80cecfa48eba85702cf5b518a2d132f9c0e42cccbf119d6d8b41b16",
+        "c2_hex": "941cfc1fbc5d03e2a465317cb8dea696f6ccfb2c1d3b42182240e5e572a38578"
       },
       "cand_sum_ciphertext": {
-        "c1_hex": "d6f9efd208b4e038e890523678ac5febe4c6db042df3d31e304c50d038cfa971",
-        "c2_hex": "589a59f1cc5672095ec011932ec1056ce10286cf5abba46c103e769a127c530e"
+        "c1_hex": "e67c87d5877497256d1164a21ef729dc478318503f94ed80e0dca05d5c1bdb10",
+        "c2_hex": "305831870b54d43b5cbc3aefc3099f629c8adb078d9f98d4ea3a0ab2baf5163b"
       },
       "diff": 0,
       "proof": {
-        "a0_hex": "b8970c026d3179934c007538ae3667c9b6cc7f866c04f695f0b40a6a543cc261",
-        "b0_hex": "e0a84d1d0a7c7f276b1cb663b334bf4e6df82a888a1ac58c28055b678be46b3d",
-        "a1_hex": "0a1899c5276dc8f19296438887c39d75b446fcfc564ee4a5431bcfcf20aa4303",
-        "b1_hex": "80db16abc06bc9b7ef94481234c79d0a1a339c0936a29ce9e7499b2518f3d82d",
-        "e0_hex": "4b607ae3860e7f6d734bc7337302826591e69b80ec7816f6f1e2a7d2e44ea503",
-        "e1_hex": "98a1a0ac3ba161a25fa9186df27e47f5b4fe3f3e37425a25a2f6dc6250339c00",
-        "z0_hex": "fe6dbd12552c83b5120a3d5fd759c0e5136aec851cebab93c2af603e5775df06",
-        "z1_hex": "b81bb450f570343ae9f3c2b6527e76b12440b58539d92719c7f377bd1afa9c03"
+        "a0_hex": "f6c22945375bce3ad28ae12323d14e636f5f0f49aa5085796d6515024eac313b",
+        "b0_hex": "ea68ab3a530d9593cf0e582357ad88db78e0d0dee3ca6c6a5a1250705ca50a11",
+        "a1_hex": "867950b69d9da839923b443e5a9478bb795b6201c55f483880252fef7582934a",
+        "b1_hex": "14595e275853a523f82501f6dc80b923c2da3920bc876a184b525702ca5e6145",
+        "e0_hex": "31fb99a4f7ffa34a3af90af0d2f3b981fddca2dbfce79273a1e670ec263a8c0e",
+        "e1_hex": "8abcd61c2081d8df9b545e2f2b656b43d026ea35f7442a33ed185f68bbfe4e01",
+        "z0_hex": "3ced6cc02884df4e18a84fc49393b4ca79e3aa4fdafbaa16c109c1fe505e4600",
+        "z1_hex": "cb3e1e3673c4eefa30fbcbe3619c52b666a614f26e2414783ed219434fa6c30f"
       }
     },
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "czHpMeiZPdMNOikXEwQXOHvAj4unXXbpQSv5QRsxaoQ",
+        "ballot_id": "EeAZWfu5szFIbk3vy3RiWK4iURhCg8QZ6U1BOBWWUl4",
         "index": 1
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "party_ciphertext": {
-        "c1_hex": "6a15ccb245858e9c14601ae71c7ec664cdedae7b1a73502533e4e8c5ce63067f",
-        "c2_hex": "c40e995d63d10113a99a467fcf34ce99cfe85147f765083a67478bf5cc0d3c5c"
+        "c1_hex": "34abcf361496dc66bac505a599ce0a66308453162900c664c3cbc5297488e70e",
+        "c2_hex": "80997d695468a4e2c67a008a2ff06fa86abe578d56b49269cbcb72ba9a8db055"
       },
       "cand_sum_ciphertext": {
-        "c1_hex": "2494ea8ebf70752fcc2175ce71d53d143ac7d637e3959c76ca818e8cc52dac44",
-        "c2_hex": "f211451bb89861ee4f5b71be626418f3b73bc40ba7d4193c604ac1993fa7536d"
+        "c1_hex": "50e52825c2b20cf77b201431a73e9c48201560b6d1cb8c8febfc1ef6166c4e22",
+        "c2_hex": "dc5719607a34cb12f26a3c62b66b78670a369294c04080599ba0c45b38c2f636"
       },
       "diff": 1,
       "proof": {
-        "a0_hex": "f4a20ab9fd6d0955347488368c7238cb3eb7545c8debdf5a2d25efe802e15250",
-        "b0_hex": "0c91211d5d2355f6db7a16878538f2e7e38ab57c9324b83196fa8480bbc9e75c",
-        "a1_hex": "3a152601000d6ae39bfffe086028bd7b2a2de5206f78d9a7268fdcbdb558b67c",
-        "b1_hex": "b2f87ec52b12e5acb2169fb7baee89a0b2acfc858712ba8965cc025450f2a745",
-        "e0_hex": "89dd8500c76ac2f0b1e7107dd8d0eac2ce8037f3b66f529538200119d06f7b03",
-        "e1_hex": "dcc3122f858571e6c5465c0dd6d78abc3e32eb8e9505e93ef3b0e5194e7eff0b",
-        "z0_hex": "ac3a3c94f073fd43e795d4766a557939495f24d815c219ac2cb92f078dd83b06",
-        "z1_hex": "25f4b12fcd4af3de35e688c8a02b27f41ac3a503213ac670f71a68e09297440c"
+        "a0_hex": "a62588f5f74c1c05cbb78532e4008925f793545bdab8d2003dd1be92bd68832f",
+        "b0_hex": "32c61392fc89f26d7b11c1f5ffaa49ac895ab59d3c88898f5cdcc20e93f7f16c",
+        "a1_hex": "46301b7b7d4b73dc91a8edb197084dece92528520c1c31c639a00cb57b65c924",
+        "b1_hex": "6ca231bbff391a5d2b4e0f4bb5c58d2417aa013464513ec27b07504784995a56",
+        "e0_hex": "5370584fb87c860645737466c4ca3d785e45ec486e0ae51d99b4d0b38f78b002",
+        "e1_hex": "c140f9bcbfcfe21c9bbf32a29d9164fac660fece545fb854e18a872ba6066603",
+        "z0_hex": "3abb82c92c7e457d0607728c1fc133ff9301610bb7d9826def3e070fa544cb01",
+        "z1_hex": "28a196c3dc7f59a9096e447e75b36a7a3482bfa02f2cf206424c0b4d21afb408"
       }
     },
     {
       "context": {
         "election_id": "election-2027-national-assembly",
-        "ballot_id": "yUtn03Ia2il-Ad3oFd-He24rTWYWm8SvAbe8EZ12v7w",
+        "ballot_id": "OnT62H621TXJ4HCCEzaCegvEE5SVpgtLTkEXFI70fx0",
         "index": 2
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "party_ciphertext": {
-        "c1_hex": "7c08e3d072566396e203b7f7fbbda26877921ca0fbd3e7320fc5dcad5227543b",
-        "c2_hex": "4469b7450694083a378dea2ffa1f82c33fed9d4b85a86aaab929d5d1d245eb05"
+        "c1_hex": "22a9c9580581d782fc1bf1a0d0abd19e9ba30575ec41ee6011054f4d322e3357",
+        "c2_hex": "94257770f051b4e670378b152a1b3972554ae18559468960b93ea74ade029f02"
       },
       "cand_sum_ciphertext": {
-        "c1_hex": "0468038749e4dcebd80d9afd6bcb5db4d60cf85216a4e84d6e4cce90a9c06059",
-        "c2_hex": "f8130fca321ee936b38090f81b62bbf10810f49c7aa14100924a38e70a80a921"
+        "c1_hex": "d68a8b09d02a8b06647a3639b585b0dabb291fe537a1a1f9692d30d1f026fd3d",
+        "c2_hex": "a497e4218eb79df5cb308589801f3227ab05a56f62cd636503a21e212263e423"
       },
       "diff": 0,
       "proof": {
-        "a0_hex": "2c08804c2d3184b75157761097e46b69804a5010916d5a9712eaca395db30f11",
-        "b0_hex": "8c83d0966a8244423071710ae86be8c97d9d45e53623883fa34f5c17e423643f",
-        "a1_hex": "3e9a551c22e9ddea4a310891404b070dd162fc44096a9d10bea6bde3e299ed0b",
-        "b1_hex": "5624de229f82394457482fa80bc70229e7f667cf18e81811ca2a5d808c32b269",
-        "e0_hex": "702e5322776192f2dbae8a53ab9b8d3900119bed925d8b24945850e4ef00900c",
-        "e1_hex": "104c8abaeb806613a13c2f638abc4b3f378b450c6b70e04ef9fb1dd83baaab06",
-        "z0_hex": "d3aef9a0813c89d8d05d96ac2a18b2177ad33c3d00c4018173182846bd5e5800",
-        "z1_hex": "e9abdfeab4d0ef4ec7da4284cdaf8481222447c0c9b29dae2e301b39a697200b"
+        "a0_hex": "d67a609229ad3f7a1e830359df66534afea911fe096e13b3d736d001471cf374",
+        "b0_hex": "8091d66995cd8096f07babf36bb35df20deec419f7bfa0eb1edec929771ccc63",
+        "a1_hex": "bcf1574d886e3f3adfd43fa0ad277d29f14357cbc0dd0952c8304936e340de3a",
+        "b1_hex": "186ca3aeee6a6aec63fa990c3282c51b33eba86c034516c13199a6db9f7a815f",
+        "e0_hex": "f5463657e0f10d7420edc559095f3257a3d54b8194c3998f5832fd09f439d103",
+        "e1_hex": "91bef9aed2446d672c9057ba5d25bd5598c9d7fba6bff344169fb82f488f510d",
+        "z0_hex": "141bfbc73f4702ac300698ac9666113b9fe5a0b18c9b2c64d0b61890d9ee2907",
+        "z1_hex": "7fd323ae9a6bad86bcd802075038049417e21ad874c55ab389c39b04d1a5cc0f"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "QCiauv7G05iPe_QCChxa3bnUs4MNUoAYhFhQ08RP03g",
+        "ballot_id": "4upi68y63eAcB-QRqZ4eWB7upGdbIlHsbmdWuNPyh78",
         "index": 0
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "party_ciphertext": {
-        "c1_hex": "169884fde1d0d3381620c647f6e3a6241d1d89b36450abadcbf5c23f98e7b13c",
-        "c2_hex": "3cb4fb6591f3b43a718ad7d174afacd9f2432e6e7df4400ce1c6e4734862c548"
+        "c1_hex": "2ec010abea874b9ba3405fc573ad33dff2beedc4ceaa2965d26a8694abf32106",
+        "c2_hex": "c0244027046a7cf0686022f2fc098b10f3e7382c0661f96bba7d245666d28110"
       },
       "cand_sum_ciphertext": {
-        "c1_hex": "843a58b5b12da6fded9aaecc2f589f6e1aba54255ce26a22f2bfd9678797e577",
-        "c2_hex": "3c716b605b4b1815fd3956ec3a422264de2aaf082b35d31064832c87ccf59b0c"
+        "c1_hex": "768970326030aef5497ddf7836ed387b4858681b06b63032fc0d4a06d3530927",
+        "c2_hex": "acb4bff4a2495daa23901034717ee6ed6b7f663aa0b137c8bd43f0b13b1f0519"
       },
       "diff": 0,
       "proof": {
-        "a0_hex": "4a86474d2ac0f2a2cf5a23cf7600a95fc574a374a5cf420d15e43455d6e6a972",
-        "b0_hex": "8c01a46e5986bcd70400137700eb585c99326fc9644f1e4b70090f3e07a10f30",
-        "a1_hex": "1090ca022986ef568a260544527141b958548a190ed36368e6176e3f4ec72c2e",
-        "b1_hex": "ea1ded9f5d0e11f0001dbbb8882052fadc5497fcb8e8b48bb2cf26a761692a45",
-        "e0_hex": "3687d8696c27ae56e38387682732cd56a3183e97045bf1018cdef90873bacd06",
-        "e1_hex": "50be78b7ab2eb48e185f455186f2ef5a00b7829c491997fa012564dd0fdd850d",
-        "z0_hex": "4da17f47ce169def0a4fe596c36fbaa59ee5cf4917d9e40f859a279abdca730b",
-        "z1_hex": "479121c1a7a2e06ac1489b2dad5394db67a1fa8a0fa5158f81ccf7e76df4f501"
+        "a0_hex": "ba42cacc590da4a131316b67b08a700765291a42b6199108f5d29944c264b239",
+        "b0_hex": "12f5e7d725f35a803633d670495fe6484bc7166bbc9fc019f1954569a81d5704",
+        "a1_hex": "f0d24d6ba2882b5bc78687711815c7e520eb714b1805b6e079497eda66c59359",
+        "b1_hex": "d0e65bc3cee6f036b47107d98157f4f49740de1fcd2a3cb715c7d50f2cca0c56",
+        "e0_hex": "4d7d0968cd0302d83ab5511da978e061fb562ad8511ba629a7e6e20e7ce1cf06",
+        "e1_hex": "ca97db92cfc6decd8174923b21f3a97c19d70122c2cb52c39e26fcb924f19b05",
+        "z0_hex": "438909bf8245c3116424f8e47492e42d61c796552b189c3bd97db803cd2cd607",
+        "z1_hex": "ce0e5c5be1e4e6423a5a8f6511149ca1db64ad11fb5735e6611f76438d6add0c"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "8hKZFpt0djatnT6sgO0B8eGIPlITXgU-0xtzZAtwie8",
+        "ballot_id": "v4eO_x9gtf07us397XYFnCk-mNx9apm4eCv-4aOICHI",
         "index": 1
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "party_ciphertext": {
-        "c1_hex": "025a0cbe59d09dbc35f4229946831835481a283e7b79e82865a412877782196f",
-        "c2_hex": "681b35f5a2a36794809c431864edd5f4e092c56dbae2149462fe3f8824826b28"
+        "c1_hex": "dad6e372047b0039e59e9d6e23df2ff20dcd3841873669e17fbf1101fec94232",
+        "c2_hex": "e20b8b3bff8b07ff1c19818b4672407ea51df6135ef81fdec66bf76337d1802d"
       },
       "cand_sum_ciphertext": {
-        "c1_hex": "54fdb48d77920418022aceb7526c74d97edc88d78c0efd14a93f34275c9a1337",
-        "c2_hex": "cc4adebd466b2fea514aa2bc53b0eb501b43f654ab1f04e5048045fabfd9a772"
+        "c1_hex": "82318ea3c858bac4ffdc0354547945b2c89fb95cc9cda33ed59e6954c535b73d",
+        "c2_hex": "9a0bc648b5a9708a73c15d6e900a590b6b5c78212f9dcba016d2e7707cd5ab30"
       },
       "diff": 1,
       "proof": {
-        "a0_hex": "e61495721098f72c0f72515589b6439e6d910c85c22be646911f41941fa64e37",
-        "b0_hex": "84fa5d00c4a1d6b95f8ef096be9514611112604a2a3c631287ba722fa6d72c28",
-        "a1_hex": "a86f4f853e56d7d487a73bc011dd897512fe557a8f615eb1e663b244ed6af86c",
-        "b1_hex": "e6aa4d26b6b475e4c7bc7eeec398da9c1a27b47b7ae24228fb019875b160a922",
-        "e0_hex": "bca8f7ec106dcb35b3fc50138165029d20a8e6728e16e0e108c3915acbfc2f0f",
-        "e1_hex": "2b720cb74ae32606897ce973627b2a84e50610e710a274d5119e107ee8124707",
-        "z0_hex": "2022a5abbb178583dcb0600f4b10a6005621b13bad8e26a32c12c0501f9ec602",
-        "z1_hex": "0aa4c983635bbbcc49c68cce1c9e25fc45b989088bde616e528d9948668bd408"
+        "a0_hex": "26763fe953480c2990acd590eaf789d4088fdfde52a315cbad4d64cc7e2d8d17",
+        "b0_hex": "a874acd48b005eb14fb2004e8d5333a617013d309e6d623f3d248414bcb1e97a",
+        "a1_hex": "dcfc8c9f2ae08d0c9d51b9e2fefa3d761eef89ffb03946d2bd3f65daebcc8513",
+        "b1_hex": "5c3457f12670d9916126afa9d857f7098215cd0a922d30931bad90aa43ff6a56",
+        "e0_hex": "768a521c088cf44df38eb46b8886b587e92b07d8abbc79876b95ae1500954106",
+        "e1_hex": "845ae989fa1393c83c9abf0e744b494bc5bfbff746759cb56460e94228aeb30b",
+        "z0_hex": "ca4d7be48d0196fc7ed338c28b94c5d120770ee2f87a1ed96884e69e965a1100",
+        "z1_hex": "541ef9009b4f5d3f3825ef9274b3615c9eb32c142d05d5632577da6d1493a302"
       }
     },
     {
       "context": {
         "election_id": "избори-2027-народно-събрание",
-        "ballot_id": "dJzD4jiR9znVDIjVTfers-qmYB5NVJ2Iz5YJpWQ7lFw",
+        "ballot_id": "_dBvgXBdo4tk169r9t9JMTx_CuMLGqHIkkvrBuG_NrI",
         "index": 2
       },
-      "public_key_hex": "46566bd49a1d6b172b9572bfcb473c7d8a16a98d3094b2528bfba76b71d68f07",
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
       "party_ciphertext": {
-        "c1_hex": "bc65c46c08e6fcd2068e20bbc21c464e8975ade46cec46b8f91a2085b87c4a79",
-        "c2_hex": "b2ae7899cc620d334d9b67d858f59e9c5c3e01d3af66bcedb4981d33a6f6d055"
+        "c1_hex": "b6293aed7080b18dad7abbca77c6adfd9e32516dccbc03fdebf8d07c6006064f",
+        "c2_hex": "e8bd211fad4c074e2c1f05461969cba6a6176142841d97ebe74193dabc49184d"
       },
       "cand_sum_ciphertext": {
-        "c1_hex": "3255136717cd04e5dce85fb664cd747911964f595cebf6522620bbf266d3495a",
-        "c2_hex": "e2ce9690dc1c523556a2abafa8f39e4528226a522e03c08c569363ee75416223"
+        "c1_hex": "7aa7ccf6ac427e936fefa88ea951037e3d3549147b6de0ae16c760f05ebf1c0a",
+        "c2_hex": "e2a3094b9321e5e735209e165ad80f346a7a191edb9701ee723301b8a1658975"
       },
       "diff": 0,
       "proof": {
-        "a0_hex": "bc7afe521a5c7d1ddf7f79b0bae7c1579ef5383e33b3d32c8d11d36211e6b530",
-        "b0_hex": "705373f24eae72e02cb0242659a1a0ebbb0f848a67157439072201b0f5f7787f",
-        "a1_hex": "183bbdc575aa28e671565f1cb8e002b325a91c45e73901005f8839dda023c44e",
-        "b1_hex": "aceaadc544e9433b935aec8fdf829570fb3d58ba34b8ff9f077ea9405d68f959",
-        "e0_hex": "8126c97d483655cfb360153ef777250ccff98f08d9258c25e08539e75e5e6602",
-        "e1_hex": "972a18fcd5bbff436d4eda951b9c9bacf2188053ca5edaaad51daabbcedbd908",
-        "z0_hex": "e1d7833539ead7a6dd0d7b01ad82a6a5e263181aabbca3d03d4b1aa34a129f02",
-        "z1_hex": "706b7cc48ca6b74755adad52646d05a10b7980561e23392d9e03a3d70869a201"
+        "a0_hex": "e0c36590bd9bfb7f701ae87f91748bb1c7742f1e3f9bbb9321dccb25f331a619",
+        "b0_hex": "c8b3b974c8e142d156f176146723ef681578976afd09f430f407f8f7bb60dd53",
+        "a1_hex": "0ef36ce5b56cfcaf637cccadf2a1fafb13b95be711df0a21ccae454cfa9db679",
+        "b1_hex": "8ebdb1ff68f0526858ca662a6c4e7598d269e7797ac94cae168be1268ceaea7c",
+        "e0_hex": "3686a19be83497f480fb5d479b251dd1cf7754c1e59011d02b8858e0ba91e80d",
+        "e1_hex": "6565f7b14441682b79b426983c8a2e3eb9c26b94fbb81a0c0e1ca36ed0a2c201",
+        "z0_hex": "7c6441af7e2beb86d0f9f13297cc03d0571f7eea6f4165c14f81e07015b9e203",
+        "z1_hex": "93edfa3c00fd2b01d033b8ee69e63034dd2349a3e041c99dda4a0025ca4a3a08"
+      }
+    },
+    {
+      "context": {
+        "election_id": "election-2027-national-assembly",
+        "ballot_id": "DRstve2pHZO4489WD0PjBkdFqsUnEztHFM-PwqeJMf4",
+        "index": 1
+      },
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "party_ciphertext": {
+        "c1_hex": "caf706249fe1445756b9779f5bd032b3397020f06d9fb2a8d556101c5efc4230",
+        "c2_hex": "605e0d9fc9026d13bd1d35f61531745f4cd4790ff644898300756e4773db6671"
+      },
+      "cand_sum_ciphertext": {
+        "c1_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "c2_hex": "e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76"
+      },
+      "diff": 0,
+      "proof": {
+        "a0_hex": "e0dcd0a68437ffdc18642073dc1a4d05c49b6302e205a91e2591febbe0ca9e67",
+        "b0_hex": "082e3c917e92fc031631e8f2be5591905bb58bd094d9f09cabd9bf5b61108b4c",
+        "a1_hex": "d249858b45acf3cf4ad860664e6c9cd2cc2a43d694d402b77a223dd950fbd910",
+        "b1_hex": "10a390a6bb8cca28d996cf99611e60e37ff51d9ccef1fea6433844391f709306",
+        "e0_hex": "a112526e29aa856b64ef20f3d48f83711d6d99a554799b1bd73d8d98c6b65b0d",
+        "e1_hex": "eaf3bf9d9c3ac3aadca3fd5cdc65612cda00e496dd983c41db1d771c73ca1a0f",
+        "z0_hex": "e67229cdf27860f0ad272e23adc656cc92f71a5136b87b19ca16ee3f12300a04",
+        "z1_hex": "24347ac7778d8173e170a40b2a68ecb600fb38c4fe3a2c744bef39615a6f4004"
+      }
+    },
+    {
+      "context": {
+        "election_id": "избори-2027-народно-събрание",
+        "ballot_id": "AA2F4ZPObE3P18If9G9DzxItOR7jOa3q-b2DPJqBEkI",
+        "index": 2
+      },
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "party_ciphertext": {
+        "c1_hex": "ea3a46759000f0759524cfbb49ca21efcda337233cb86817ecac43602818a93f",
+        "c2_hex": "c2fbd4cfbf0d91bdcb116512c4eda5e62ec9dc1dc4bc6db687d267097fd7e874"
+      },
+      "cand_sum_ciphertext": {
+        "c1_hex": "ea3a46759000f0759524cfbb49ca21efcda337233cb86817ecac43602818a93f",
+        "c2_hex": "c2fbd4cfbf0d91bdcb116512c4eda5e62ec9dc1dc4bc6db687d267097fd7e874"
+      },
+      "diff": 0,
+      "proof": {
+        "a0_hex": "74dc709665c1ca962ef4b6d79fe6d34dc8d08834f576cc8a910f9f8130167317",
+        "b0_hex": "16c127438ece5bf46985f35e403880db6c07ec3d8dc0980008e152b5f9513758",
+        "a1_hex": "b6cbd47fadbd4fcdef10bb08ab3f412a465735a7a865c322c228d4a98b1ccd1f",
+        "b1_hex": "9c4899ed3c96ec658dff9d9bd5ff3b8ac251279757050e4a9b086ba19160ad70",
+        "e0_hex": "d091aacf86331e5e9c97675d6aead6ef5ca597774d36600d028b4aa1d7d66509",
+        "e1_hex": "18723dbd6dfe93d2a42505a0895bebf9edc5870709b224e9d9fa435e8228dd05",
+        "z0_hex": "a8286248bd70b4d8a7fd4ac29110d3706363b9a59400c79abe270c20361e8803",
+        "z1_hex": "140d7d881c528ec00e84ee89df2839ec9d385a946912fb359368d915b8ea080a"
+      }
+    },
+    {
+      "context": {
+        "election_id": "election-2027-national-assembly",
+        "ballot_id": "WjU_YkLY4QYrt7BmydHpBOR97zwSZraQO85RHlk0X08",
+        "index": 2
+      },
+      "public_key_hex": "b04f662e363ee1cd701276a1220c2907e53762132626c08eb5ea24688a7e9038",
+      "party_ciphertext": {
+        "c1_hex": "d6d308f8e7b3e4acaf56f77e2904dab9bc4785b51732088f62b297eb5ce9d720",
+        "c2_hex": "5612af1bd6bf518b26bca13b46404158a951c101bee94b515f2c7d6548159f33"
+      },
+      "cand_sum_ciphertext": {
+        "c1_hex": "d6d308f8e7b3e4acaf56f77e2904dab9bc4785b51732088f62b297eb5ce9d720",
+        "c2_hex": "8e5ee02587ef5b9b5bf554aa602f0ab8b13ac7201535372bd927e0ca9dc80273"
+      },
+      "diff": 1,
+      "proof": {
+        "a0_hex": "7e3184a0e93781f73e45d38acaa5cc32e3c06df2fae85392840ce5e292840547",
+        "b0_hex": "8aa4643ea67b1953d78615cc2f9683cf120884fb95a7896093f3acffd529ce78",
+        "a1_hex": "fabc726ac9a896cbdd1fc502914330a5fcfb8e7e63ad82a3bf7d883c9663f900",
+        "b1_hex": "56111e41957bc0676a6e9cebeb1e699236790e829af794fdd72709ee8350d212",
+        "e0_hex": "37590d76f5c875621c1d1c12ad913d1fb9d3d00c8d7aea22724ed7fac7c9ff03",
+        "e1_hex": "352d0708afdc41eefd61c1f81f817f1bb4e475f46b60254a584cf4998e2c850e",
+        "z0_hex": "83774db75eeaefff2bb6a1bd59dfa01a653f6e2051792ef7eef3b8c2010b780f",
+        "z1_hex": "0aae1c73d226681ece57b764d45832ff971b33fb1c27687b4f0d06f812a17601"
       }
     }
   ]
