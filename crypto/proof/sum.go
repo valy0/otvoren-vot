@@ -44,6 +44,10 @@ func ProveSumOne(ctx Context, publicKey *ristretto255.Element, cts []*elgamal.Ci
 // to 1. It returns nil for a valid proof, an error wrapping ErrInvalidProof
 // when the equations do not hold, and an error wrapping ErrMalformed for
 // unusable input.
+//
+// Inputs that come from the wire must be decoded with crypto/group (or
+// elgamal.CiphertextFromBytes) first; these verifiers do not reject identity
+// elements, because derived aggregates may legitimately be the identity.
 func VerifySumOne(ctx Context, publicKey *ristretto255.Element, cts []*elgamal.Ciphertext, p *SumOneProof) error {
 	if err := checkSumStatement(ctx, publicKey, cts); err != nil {
 		return err

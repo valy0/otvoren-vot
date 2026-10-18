@@ -49,6 +49,10 @@ func ProveChaumPedersen(context [][]byte, g, h, A, B *ristretto255.Element, x *r
 // valid proof, an error wrapping ErrInvalidProof when the equations do not
 // hold, and an error wrapping ErrMalformed for a nil statement element or
 // proof field.
+//
+// Inputs that come from the wire must be decoded with crypto/group (or
+// elgamal.CiphertextFromBytes) first; these verifiers do not reject identity
+// elements, because derived aggregates may legitimately be the identity.
 func VerifyChaumPedersen(context [][]byte, g, h, A, B *ristretto255.Element, p *ChaumPedersenProof) error {
 	if err := checkCPStatement(g, h, A, B); err != nil {
 		return err
