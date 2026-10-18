@@ -3,51 +3,54 @@ package proof
 import (
 	"testing"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 	"github.com/valy0/otvoren-vot/crypto/internal"
 )
 
 func TestChaumPedersenValid(t *testing.T) {
 	x := internal.RandomScalar()
-	g := edwards25519.NewGeneratorPoint()
-	h := new(edwards25519.Point).ScalarBaseMult(internal.RandomScalar())
+	g := ristretto255.NewGeneratorElement()
+	h := ristretto255.NewIdentityElement().ScalarBaseMult(internal.RandomScalar())
 
-	gx := new(edwards25519.Point).ScalarMult(x, g)
-	hx := new(edwards25519.Point).ScalarMult(x, h)
+	gx := ristretto255.NewIdentityElement().ScalarMult(x, g)
+	hx := ristretto255.NewIdentityElement().ScalarMult(x, h)
 
-	p := ProveChaumPedersen(g, h, gx, hx, x)
-	if !VerifyChaumPedersen(g, h, gx, hx, p) {
-		t.Fatal("valid proof should verify")
+	p, err := ProveChaumPedersen(nil, g, h, gx, hx, x)
+	if err != nil {
+		t.Fatalf("ProveChaumPedersen: %v", err)
 	}
+	requireValid(t, VerifyChaumPedersen(nil, g, h, gx, hx, p), "valid proof should verify")
 }
 
 func TestChaumPedersenMismatchedExponents(t *testing.T) {
 	x := internal.RandomScalar()
 	y := internal.RandomScalar()
-	g := edwards25519.NewGeneratorPoint()
-	h := new(edwards25519.Point).ScalarBaseMult(internal.RandomScalar())
+	g := ristretto255.NewGeneratorElement()
+	h := ristretto255.NewIdentityElement().ScalarBaseMult(internal.RandomScalar())
 
-	gx := new(edwards25519.Point).ScalarMult(x, g)
-	hy := new(edwards25519.Point).ScalarMult(y, h)
+	gx := ristretto255.NewIdentityElement().ScalarMult(x, g)
+	hy := ristretto255.NewIdentityElement().ScalarMult(y, h)
 
-	p := ProveChaumPedersen(g, h, gx, hy, x)
-	if VerifyChaumPedersen(g, h, gx, hy, p) {
-		t.Fatal("proof with mismatched exponents should NOT verify")
+	p, err := ProveChaumPedersen(nil, g, h, gx, hy, x)
+	if err != nil {
+		t.Fatalf("ProveChaumPedersen: %v", err)
 	}
+	requireInvalid(t, VerifyChaumPedersen(nil, g, h, gx, hy, p), "proof with mismatched exponents should NOT verify")
 }
 
 func TestChaumPedersenTamperedProof(t *testing.T) {
 	x := internal.RandomScalar()
-	g := edwards25519.NewGeneratorPoint()
-	h := new(edwards25519.Point).ScalarBaseMult(internal.RandomScalar())
+	g := ristretto255.NewGeneratorElement()
+	h := ristretto255.NewIdentityElement().ScalarBaseMult(internal.RandomScalar())
 
-	gx := new(edwards25519.Point).ScalarMult(x, g)
-	hx := new(edwards25519.Point).ScalarMult(x, h)
+	gx := ristretto255.NewIdentityElement().ScalarMult(x, g)
+	hx := ristretto255.NewIdentityElement().ScalarMult(x, h)
 
-	p := ProveChaumPedersen(g, h, gx, hx, x)
+	p, err := ProveChaumPedersen(nil, g, h, gx, hx, x)
+	if err != nil {
+		t.Fatalf("ProveChaumPedersen: %v", err)
+	}
 	// Tamper with response
 	p.Z = internal.RandomScalar()
-	if VerifyChaumPedersen(g, h, gx, hx, p) {
-		t.Fatal("tampered proof should NOT verify")
-	}
+	requireInvalid(t, VerifyChaumPedersen(nil, g, h, gx, hx, p), "tampered proof should NOT verify")
 }
