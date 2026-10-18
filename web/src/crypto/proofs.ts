@@ -282,19 +282,19 @@ export function verifySumOne(ctx: ProofContext, pubKey: Uint8Array, cts: Ciphert
     const e = sumChallenge(context, pubKey, aggCt, p.a, p.b)
 
     // g^z == a + aggC1 * e
-    const lhs1 = sodium.crypto_scalarmult_ristretto255_base(p.z)
+    const lhs1 = mulBase(p.z)
     const rhs1 = sodium.crypto_core_ristretto255_add(
       p.a,
-      sodium.crypto_scalarmult_ristretto255(e, aggCt.c1),
+      mul(e, aggCt.c1),
     )
     if (!bytesEqual(lhs1, rhs1)) return false
 
     // h^z == b + (aggC2 - g) * e
     const c2MinusG = sodium.crypto_core_ristretto255_sub(aggCt.c2, g)
-    const lhs2 = sodium.crypto_scalarmult_ristretto255(p.z, pubKey)
+    const lhs2 = mul(p.z, pubKey)
     const rhs2 = sodium.crypto_core_ristretto255_add(
       p.b,
-      sodium.crypto_scalarmult_ristretto255(e, c2MinusG),
+      mul(e, c2MinusG),
     )
     return bytesEqual(lhs2, rhs2)
   } catch {
@@ -339,8 +339,9 @@ function verifyDisjunctive(
 
 /**
  * The verification equations of the disjunctive proof. Inputs are already
- * validated; libsodium may still throw (e.g. an identity scalar-mult result),
- * which every caller turns into `false`.
+ * validated. Scalar-mults go through `mul`/`mulBase`, so an identity
+ * intermediate is accepted exactly as Go accepts it; any other libsodium
+ * exception is turned into `false` by every caller.
  */
 function disjunctiveEquationsHold(
   domain: string,
@@ -359,35 +360,35 @@ function disjunctiveEquationsHold(
   if (!bytesEqual(eSum, e)) return false
 
   // Branch 0: g^z0 == a0 + c1*e0
-  const lhs0 = sodium.crypto_scalarmult_ristretto255_base(p.z0)
+  const lhs0 = mulBase(p.z0)
   const rhs0 = sodium.crypto_core_ristretto255_add(
     p.a0,
-    sodium.crypto_scalarmult_ristretto255(p.e0, ct.c1),
+    mul(p.e0, ct.c1),
   )
   if (!bytesEqual(lhs0, rhs0)) return false
 
   // Branch 0: h^z0 == b0 + c2*e0
-  const lhs0b = sodium.crypto_scalarmult_ristretto255(p.z0, pubKey)
+  const lhs0b = mul(p.z0, pubKey)
   const rhs0b = sodium.crypto_core_ristretto255_add(
     p.b0,
-    sodium.crypto_scalarmult_ristretto255(p.e0, ct.c2),
+    mul(p.e0, ct.c2),
   )
   if (!bytesEqual(lhs0b, rhs0b)) return false
 
   // Branch 1: g^z1 == a1 + c1*e1
-  const lhs1 = sodium.crypto_scalarmult_ristretto255_base(p.z1)
+  const lhs1 = mulBase(p.z1)
   const rhs1 = sodium.crypto_core_ristretto255_add(
     p.a1,
-    sodium.crypto_scalarmult_ristretto255(p.e1, ct.c1),
+    mul(p.e1, ct.c1),
   )
   if (!bytesEqual(lhs1, rhs1)) return false
 
   // Branch 1: h^z1 == b1 + (c2 - g)*e1
   const c2MinusG = sodium.crypto_core_ristretto255_sub(ct.c2, g)
-  const lhs1b = sodium.crypto_scalarmult_ristretto255(p.z1, pubKey)
+  const lhs1b = mul(p.z1, pubKey)
   const rhs1b = sodium.crypto_core_ristretto255_add(
     p.b1,
-    sodium.crypto_scalarmult_ristretto255(p.e1, c2MinusG),
+    mul(p.e1, c2MinusG),
   )
   return bytesEqual(lhs1b, rhs1b)
 }
@@ -487,6 +488,30 @@ function homomorphicSubtract(a: Ciphertext, b: Ciphertext): Ciphertext {
 }
 
 // ---------------------------------------------------------------------------
+// Verifier arithmetic with Go's identity semantics
+// ---------------------------------------------------------------------------
+
+// libsodium's crypto_scalarmult_ristretto255(_base) refuses an identity result
+// (it throws); Go's ScalarMult/ScalarBaseMult return the identity and carry on.
+// crypto_core_ristretto255_add/sub already accept and return the identity
+// encoding (32 zero bytes), so only the scalar-mults need wrapping. In this
+// prime-order group s·P is the identity exactly when s ≡ 0 (mod ℓ) or P is the
+// identity. Every scalar reaching these helpers is canonical (validated wire
+// scalars, or reduced challenges), so s ≡ 0 is exactly 32 zero bytes.
+
+/** s·P, returning the identity encoding where libsodium would throw. */
+function mul(s: Uint8Array, point: Uint8Array): Uint8Array {
+  if (isAllZero(s) || isAllZero(point)) return new Uint8Array(32)
+  return getSodium().crypto_scalarmult_ristretto255(s, point)
+}
+
+/** s·G, returning the identity encoding where libsodium would throw. */
+function mulBase(s: Uint8Array): Uint8Array {
+  if (isAllZero(s)) return new Uint8Array(32)
+  return getSodium().crypto_scalarmult_ristretto255_base(s)
+}
+
+// ---------------------------------------------------------------------------
 // Input validation for verifiers
 // ---------------------------------------------------------------------------
 
@@ -494,10 +519,17 @@ function isBytes32(x: unknown): x is Uint8Array {
   return x instanceof Uint8Array && x.length === 32
 }
 
-/** A 32-byte canonical Ristretto255 encoding that is not the identity (32 zero bytes). */
+function isAllZero(x: Uint8Array): boolean {
+  return x.every(byte => byte === 0)
+}
+
+/**
+ * A wire point: a 32-byte canonical Ristretto255 encoding that is not the
+ * identity (32 zero bytes), as Go's group.DecodeElement requires.
+ */
 function isPoint(x: unknown): boolean {
   if (!isBytes32(x)) return false
-  if (x.every(byte => byte === 0)) return false
+  if (isAllZero(x)) return false
   return getSodium().crypto_core_ristretto255_is_valid_point(x)
 }
 

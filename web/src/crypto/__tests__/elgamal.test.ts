@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { initSodium, getSodium } from '../sodium'
 import {
   encrypt,
+  encryptWithRandomness,
   homomorphicAdd,
   serializeCiphertext,
   deserializeCiphertext,
@@ -59,6 +60,19 @@ describe('encrypt', () => {
     const { ciphertext, randomness } = encrypt(0, pk)
     const expectedC1 = sodium.crypto_scalarmult_ristretto255_base(randomness)
     expect(ciphertext.c1).toEqual(expectedC1)
+  })
+})
+
+describe('encryptWithRandomness', () => {
+  it('throws unless messageBit is exactly 0 or 1 (encrypt shares the path)', () => {
+    const { pk } = makeKeyPair()
+    const r = getSodium().crypto_core_ristretto255_scalar_random()
+    for (const bad of [2, -1, 0.5, Number.NaN]) {
+      expect(() => encryptWithRandomness(bad as 0 | 1, r, pk)).toThrow()
+      expect(() => encrypt(bad as 0 | 1, pk)).toThrow()
+    }
+    expect(() => encryptWithRandomness(0, r, pk)).not.toThrow()
+    expect(() => encryptWithRandomness(1, r, pk)).not.toThrow()
   })
 })
 

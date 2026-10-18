@@ -31,8 +31,12 @@ export function encrypt(messageBit: 0 | 1, pubKey: Uint8Array): EncryptionResult
  * Encrypts a single bit (0 or 1) under the given public key with the caller's
  * randomness `r`: c1 = g^r, c2 = h^r + g^m. Mirrors Go's
  * elgamal.EncryptWithRandomness; used for deterministic test vectors.
+ * Throws unless messageBit is exactly 0 or 1.
  */
 export function encryptWithRandomness(messageBit: 0 | 1, r: Uint8Array, pubKey: Uint8Array): Ciphertext {
+  if (messageBit !== 0 && messageBit !== 1) {
+    throw new Error(`messageBit must be 0 or 1, got ${String(messageBit)}`)
+  }
   const sodium = getSodium()
   const c1 = sodium.crypto_scalarmult_ristretto255_base(r)
   const hr = sodium.crypto_scalarmult_ristretto255(r, pubKey)
