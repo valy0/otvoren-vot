@@ -22,6 +22,9 @@ func testRedisClient(t *testing.T) *redis.Client {
 
 	client := redis.NewClient(&redis.Options{Addr: addr})
 	if err := client.Ping(context.Background()).Err(); err != nil {
+		if os.Getenv("TEST_REDIS_URL") != "" {
+			t.Fatalf("TEST_REDIS_URL is set but Redis is unreachable at %s: %v", addr, err)
+		}
 		t.Skipf("Redis not available at %s: %v", addr, err)
 	}
 

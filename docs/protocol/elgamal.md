@@ -544,4 +544,4 @@ The Go server and JavaScript client operate on the same group (Ristretto255) and
 - Ciphertexts are serialized as `c1 || c2` (64 bytes, no length prefix within the pair)
 - Both `filippo.io/edwards25519` and `libsodium` use identical Ristretto255 encodings (RFC 8032 + Ristretto construction)
 
-**Test vectors:** A set of known-answer test vectors (plaintext, randomness, expected ciphertext) is maintained in `crypto/testdata/` and cross-validated between the Go and JavaScript implementations during CI.
+**Test vectors:** A set of known-answer test vectors (plaintext, randomness, expected ciphertext) is maintained in `crypto/vectors/testdata/vectors.json` and cross-validated between the Go and JavaScript implementations during CI.

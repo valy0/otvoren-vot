@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/valy0/otvoren-vot/bulletin-board/board"
+	"github.com/valy0/otvoren-vot/bulletin-board/internal/testdb"
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
 )
 
@@ -24,14 +24,9 @@ func setupTestServerWithOrigins(t *testing.T, allowedOrigins []string) (*httptes
 	t.Helper()
 	ctx := context.Background()
 
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://board:dev@localhost:5432/bulletin_board?sslmode=disable"
-	}
-
-	s, err := store.New(ctx, dbURL, 25, 5)
+	s, err := store.New(ctx, testdb.URL(), 25, 5)
 	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
+		testdb.Unavailable(t, err)
 	}
 	s.RunMigrations(ctx)
 	s.Pool().Exec(ctx, "ALTER TABLE signed_roots DISABLE TRIGGER ALL")

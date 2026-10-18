@@ -6,26 +6,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 
+	"github.com/valy0/otvoren-vot/bulletin-board/internal/testdb"
 	"github.com/valy0/otvoren-vot/bulletin-board/store"
 	"github.com/valy0/otvoren-vot/crypto/merkle"
 )
 
-func testDatabaseURL() string {
-	if url := os.Getenv("TEST_DATABASE_URL"); url != "" {
-		return url
-	}
-	return "postgres://board:dev@localhost:5432/bulletin_board?sslmode=disable"
-}
-
 func setupBoard(t *testing.T) *Board {
 	t.Helper()
 	ctx := context.Background()
-	s, err := store.New(ctx, testDatabaseURL(), 25, 5)
+	s, err := store.New(ctx, testdb.URL(), 25, 5)
 	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
+		testdb.Unavailable(t, err)
 	}
 	s.RunMigrations(ctx)
 	// Clean for test isolation (disable append-only triggers temporarily)
@@ -123,9 +116,9 @@ func TestSealPreventsAppend(t *testing.T) {
 
 func TestSealPersistsAcrossRestart(t *testing.T) {
 	ctx := context.Background()
-	s, err := store.New(ctx, testDatabaseURL(), 25, 5)
+	s, err := store.New(ctx, testdb.URL(), 25, 5)
 	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
+		testdb.Unavailable(t, err)
 	}
 	s.RunMigrations(ctx)
 	s.Pool().Exec(ctx, "ALTER TABLE signed_roots DISABLE TRIGGER ALL")

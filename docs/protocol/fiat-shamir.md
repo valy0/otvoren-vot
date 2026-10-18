@@ -119,10 +119,10 @@ recomputes the difference ciphertext independently.
 
 4. **Deterministic:** Given identical inputs, Go and TypeScript implementations
    produce the same challenge scalar. This is verified by the cross-language test
-   vectors in `crypto/testdata/vectors.json`.
+   vectors in `crypto/vectors/testdata/vectors.json`.
 
 ## Reference Implementation
 
 - **Go:** `crypto/internal/scalar.go` function `FiatShamir`
 - **TypeScript:** `web/src/crypto/fiat-shamir.ts` (to be implemented)
-- **Test vectors:** `crypto/testdata/vectors.json`
+- **Test vectors:** `crypto/vectors/testdata/vectors.json`

@@ -35,6 +35,9 @@ func setupStore(t *testing.T) *store.PostgresStore {
 
 	s, err := store.New(ctx, testDatabaseURL(), electionID, testHistoryKey)
 	if err != nil {
+		if os.Getenv("TEST_DATABASE_URL") != "" {
+			t.Fatalf("TEST_DATABASE_URL is set but PostgreSQL is unreachable: %v", err)
+		}
 		t.Skipf("PostgreSQL not available: %v", err)
 	}
 	if err := s.RunMigrations(ctx); err != nil {
