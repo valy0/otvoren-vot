@@ -285,7 +285,11 @@ STEP 1 — Commitment:
     B = k · C₁
 
 STEP 2 — Challenge (Fiat-Shamir):
-    e = H_hash("otvoren-vot.partial-decryption-proof" || G || H_i || C₁ || D_i || A || B)
+    e = FiatShamir(partial-decryption transcript of fiat-shamir.md:
+        domain "otvoren-vot.chaum-pedersen", election_id, trustee_index,
+        slot_index, c2, tally_digest, set_commitment, sealed_head,
+        G, C₁, H_i, D_i, A, B)
+    (fiat-shamir.md names the commitments u = A, v = B)
 
 STEP 3 — Response:
     z = k + e · S_i  (mod q)
@@ -299,7 +303,8 @@ The HSM outputs (D_i, π_dec_i). The private share S_i was used inside the HSM f
 
 ```
 1. Recompute challenge:
-   e = H_hash("otvoren-vot.partial-decryption-proof" || G || H_i || C₁ || D_i || A || B)
+   e = FiatShamir(the same partial-decryption transcript, see fiat-shamir.md,
+       "Partial-Decryption Proof (Chaum-Pedersen)")
 
 2. Check:
    z · G  = A + e · H_i

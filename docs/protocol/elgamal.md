@@ -288,24 +288,23 @@ The Chaum-Pedersen protocol (non-interactive via Fiat-Shamir):
    a2 = c1^k
    ```
 
-2. **Challenge:** Compute the challenge hash:
+2. **Challenge:** Compute the challenge with the partial-decryption transcript specified in [fiat-shamir.md](fiat-shamir.md) ("Partial-Decryption Proof (Chaum-Pedersen)"): domain `otvoren-vot.chaum-pedersen`, then the election, trustee, slot, `c2`, `tally_digest`, `set_commitment` and `sealed_head` context, then `g`, `c1`, `h_i`, `d_i`, `a1`, `a2` (the commitments `u`, `v` of that document). The hash is SHA-512 reduced to a scalar in `Z_q`:
    ```
-   e = Hash(g, h_i, c1, d_i, a1, a2)
+   e = FiatShamir(partial-decryption transcript)
    ```
-   using SHA-256 or BLAKE2b, interpreted as a scalar in `Z_q`.
 
 3. **Response:** Compute:
    ```
-   s = k - e * x_i   (mod q)
+   z = k + e * x_i   (mod q)
    ```
 
-4. **Proof:** The tuple `(a1, a2, s)` is published alongside `d_i`.
+4. **Proof:** The tuple `(a1, a2, z)` is published alongside `d_i`.
 
-**Verification** (by anyone): Given `(g, h_i, c1, d_i, a1, a2, s)`:
+**Verification** (by anyone): Given `(g, h_i, c1, d_i, a1, a2, z)`:
 
-1. Recompute: `e = Hash(g, h_i, c1, d_i, a1, a2)`
-2. Check: `g^s * h_i^e == a1`
-3. Check: `c1^s * d_i^e == a2`
+1. Recompute `e` from the same transcript.
+2. Check: `g^z == a1 * h_i^e`
+3. Check: `c1^z == a2 * d_i^e`
 
 If both checks pass, the verifier is convinced that the person who produced `d_i` knows `x_i` such that `d_i = c1^{x_i}` and `h_i = g^{x_i}`.
 
@@ -448,43 +447,40 @@ The bulletin board is append-only and write-heavy during the election, read-heav
 
 ### 10.1 Go (server-side)
 
-**Library:** `filippo.io/edwards25519`
+**Library:** `github.com/gtank/ristretto255`
 
-This package provides constant-time Ristretto255 operations. Key types and functions:
+This package implements RFC 9496 ristretto255 over a prime-order group. Key types and functions:
 
 ```go
-import "filippo.io/edwards25519"
+import "github.com/gtank/ristretto255"
 
 // Scalars (elements of Z_q)
-var x edwards25519.Scalar          // private key / randomness
+x := ristretto255.NewScalar()      // private key / randomness
 x.SetUniformBytes(randomBytes[:])  // sample from 64 uniform bytes
 
 // Points (elements of G)
-var g edwards25519.Point
-g.Set(edwards25519.NewGeneratorPoint())  // the basepoint
-
-var h edwards25519.Point
-h.ScalarMult(&x, &g)              // h = g^x
+h := ristretto255.NewElement()
+h.ScalarBaseMult(x)                // h = g^x  (g is the standard basepoint)
 
 // ElGamal encryption
-var r edwards25519.Scalar
+r := ristretto255.NewScalar()
 r.SetUniformBytes(randomBytes[:])
 
-var c1, c2 edwards25519.Point
-c1.ScalarMult(&r, &g)             // c1 = g^r
+c1 := ristretto255.NewElement()
+c1.ScalarBaseMult(r)               // c1 = g^r
 
-var hr edwards25519.Point
-hr.ScalarMult(&r, &h)             // h^r
+hr := ristretto255.NewElement()
+hr.ScalarMult(r, h)                // h^r
 
-var gm edwards25519.Point
-gm.ScalarMult(&m, &g)             // g^m  (m is 0 or 1)
+gm := ristretto255.NewElement()
+gm.ScalarBaseMult(m)               // g^m  (m is a Scalar holding 0 or 1)
 
-c2.Add(&hr, &gm)                  // c2 = h^r * g^m
+c2 := ristretto255.NewElement()
+c2.Add(hr, gm)                     // c2 = h^r * g^m
 
 // Homomorphic addition (tallying)
-var sum1, sum2 edwards25519.Point
-sum1.Add(&ballot1_c1, &ballot2_c1)
-sum2.Add(&ballot1_c2, &ballot2_c2)
+sum1 := ristretto255.NewElement().Add(ballot1_c1, ballot2_c1)
+sum2 := ristretto255.NewElement().Add(ballot1_c2, ballot2_c2)
 ```
 
 **Important:** `SetUniformBytes` takes 64 bytes (512 bits) and reduces modulo `q` to produce a uniformly distributed scalar. Do NOT use `SetCanonicalBytes` (32 bytes) for random scalar generation — it does not produce a uniform distribution over `Z_q`.
@@ -542,6 +538,6 @@ The Go server and JavaScript client operate on the same group (Ristretto255) and
 - Points are serialized as 32-byte canonical Ristretto255 encodings
 - Scalars are serialized as 32-byte little-endian integers reduced modulo `q`
 - Ciphertexts are serialized as `c1 || c2` (64 bytes, no length prefix within the pair)
-- Both `filippo.io/edwards25519` and `libsodium` use identical Ristretto255 encodings (RFC 8032 + Ristretto construction)
+- Both `github.com/gtank/ristretto255` and `libsodium` implement RFC 9496 ristretto255 and produce identical encodings
 
 **Test vectors:** A set of known-answer test vectors (plaintext, randomness, expected ciphertext) is maintained in `crypto/vectors/testdata/vectors.json` and cross-validated between the Go and JavaScript implementations during CI.
