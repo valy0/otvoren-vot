@@ -89,12 +89,13 @@ func TestFullElectionSimulation(t *testing.T) {
 	// === PHASE 3: MERKLE VERIFICATION ===
 	t.Log("Phase 3: Merkle Tree Verification")
 	for i := range numVoters {
-		p, err := tree.InclusionProof(i)
+		data := ballots[i].PartyVector[0].Bytes()
+		p, err := tree.InclusionProof(uint64(i), tree.Size())
 		if err != nil {
 			t.Fatalf("voter %d: Merkle proof error: %v", i, err)
 		}
-		if !merkle.VerifyInclusion(tree.Root(), ballots[i].PartyVector[0].Bytes(), i, tree.Size(), p) {
-			t.Fatalf("voter %d: Merkle inclusion failed", i)
+		if err := merkle.VerifyInclusion(merkle.LeafHash(data), uint64(i), tree.Size(), p, tree.Root()); err != nil {
+			t.Fatalf("voter %d: Merkle inclusion failed: %v", i, err)
 		}
 	}
 	t.Logf("  All %d inclusion proofs verified", numVoters)
