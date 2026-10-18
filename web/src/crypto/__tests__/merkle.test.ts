@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { bytesToHex, hexToBytes } from '../hex'
 import {
   HASH_SIZE,
@@ -178,6 +178,112 @@ describe('TS-only negatives never throw and return false', () => {
     for (let at = 0; at < cp.length; at++) {
       expect(conOk(con.size1, con.size2, undefined, undefined, holed(cp, at))).toBe(false)
     }
+  })
+
+  // A verifier's result, or how it threw: a throw is a failure of its own.
+  const outcome = (f: () => boolean): boolean | string => {
+    try {
+      return f()
+    } catch (e) {
+      return `threw ${String(e)}`
+    }
+  }
+  // 64 bytes whose first 32 are the real hash, claiming length 32 through an
+  // own length property or a subclass getter. TypedArray#set and libsodium
+  // still see all 64 bytes.
+  class LongerThanItSays extends Uint8Array {}
+  Object.defineProperty(LongerThanItSays.prototype, 'length', { get: () => HASH_SIZE })
+  const lying = (x: Uint8Array): Uint8Array[] => {
+    const own = new Uint8Array(2 * HASH_SIZE).fill(0xff)
+    own.set(x)
+    Object.defineProperty(own, 'length', { value: HASH_SIZE })
+    const sub = new LongerThanItSays(2 * HASH_SIZE).fill(0xff)
+    sub.set(x)
+    return [own, sub]
+  }
+  const replaced = (xs: Uint8Array[], at: number, x: Uint8Array): Uint8Array[] => {
+    const copy = [...xs]
+    copy[at] = x
+    return copy
+  }
+
+  it('rejects a proof hash that claims length 32 but holds 64 bytes, without throwing', () => {
+    for (const v of vectors.inclusion) {
+      const proof = hs(v.proof_hex)
+      for (let at = 0; at < proof.length; at++) {
+        for (const bad of lying(proof[at])) {
+          expect(outcome(() => incOk(v.index, v.size, h(v.leaf_hash_hex), replaced(proof, at, bad), h(v.root_hex)))).toBe(false)
+        }
+      }
+    }
+    for (const v of vectors.consistency) {
+      const proof = hs(v.proof_hex)
+      for (let at = 0; at < proof.length; at++) {
+        for (const bad of lying(proof[at])) {
+          expect(outcome(() => conOk(v.size1, v.size2, h(v.root1_hex), h(v.root2_hex), replaced(proof, at, bad)))).toBe(false)
+        }
+      }
+    }
+  })
+
+  it('rejects a leaf or root that claims length 32 but holds 64 bytes, without throwing', () => {
+    for (const v of vectors.inclusion) {
+      const [leaf, proof, root] = [h(v.leaf_hash_hex), hs(v.proof_hex), h(v.root_hex)]
+      for (const bad of lying(leaf)) expect(outcome(() => incOk(v.index, v.size, bad, proof, root))).toBe(false)
+      for (const bad of lying(root)) expect(outcome(() => incOk(v.index, v.size, leaf, proof, bad))).toBe(false)
+    }
+    for (const v of vectors.consistency) {
+      const [r1, r2, proof] = [h(v.root1_hex), h(v.root2_hex), hs(v.proof_hex)]
+      for (const bad of lying(r1)) expect(outcome(() => conOk(v.size1, v.size2, bad, r2, proof))).toBe(false)
+      for (const bad of lying(r2)) expect(outcome(() => conOk(v.size1, v.size2, r1, bad, proof))).toBe(false)
+    }
+  })
+
+  it('rejects a proof of more than 64 hashes without reading it', () => {
+    // No valid proof for safe-integer sizes is longer than 54 hashes.
+    let reads = 0
+    const long = new Array<Uint8Array>(65)
+    Object.defineProperty(long, 0, {
+      get: () => {
+        reads++
+        return h(inc.proof_hex[0])
+      },
+    })
+    expect(incOk(inc.index, inc.size, undefined, long)).toBe(false)
+    expect(conOk(con.size1, con.size2, undefined, undefined, long)).toBe(false)
+    expect(reads).toBe(0)
+    const sparse = new Array<Uint8Array>(1e7)
+    expect(incOk(inc.index, inc.size, undefined, sparse)).toBe(false)
+    expect(conOk(con.size1, con.size2, undefined, undefined, sparse)).toBe(false)
+  })
+})
+
+describe('before initSodium', () => {
+  it('both verifiers return false instead of throwing', async () => {
+    // A fresh module graph: this sodium.ts has never been initialised.
+    vi.resetModules()
+    const fresh = await import('../sodium')
+    const merkle = await import('../merkle')
+    expect(() => fresh.getSodium()).toThrow()
+    const inc = vectors.inclusion.find(v => v.proof_hex.length > 0)
+    const con = vectors.consistency.find(v => v.size1 > 0 && v.proof_hex.length > 0)
+    if (!inc || !con) throw new Error('vectors lack a non-trivial proof')
+    const empty = h('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+    const tryBoth = (f: () => boolean): boolean | string => {
+      try {
+        return f()
+      } catch (e) {
+        return `threw ${String(e)}`
+      }
+    }
+    expect(
+      tryBoth(() => merkle.verifyInclusion(h(inc.leaf_hash_hex), inc.index, inc.size, hs(inc.proof_hex), h(inc.root_hex))),
+    ).toBe(false)
+    expect(
+      tryBoth(() => merkle.verifyConsistency(con.size1, con.size2, h(con.root1_hex), h(con.root2_hex), hs(con.proof_hex))),
+    ).toBe(false)
+    // The trivial cases hash too: the empty tree's head is computed.
+    expect(tryBoth(() => merkle.verifyConsistency(0, 0, empty, empty, []))).toBe(false)
   })
 })
 
