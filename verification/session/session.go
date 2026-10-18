@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 )
 
 // SessionTTL is the default lifetime for verification sessions.
@@ -19,8 +19,8 @@ type Session struct {
 	CreatedAt    time.Time                    `json:"created_at"`
 	ExpiresAt    time.Time                    `json:"expires_at"`
 	Verified     bool                         `json:"verified"` // whether return code has been delivered
-	Shares       map[int]*edwards25519.Scalar // trustee_index -> share
-	MasterSecret *edwards25519.Scalar         // kept for return code derivation, zeroed at expiry
+	Shares       map[int]*ristretto255.Scalar // trustee_index -> share
+	MasterSecret *ristretto255.Scalar         // kept for return code derivation, zeroed at expiry
 	ThresholdMet bool
 	Codes        map[string]string // party -> 8-digit code
 	Threshold    int
@@ -51,7 +51,7 @@ func (s *Store) Create(threshold int) (*Session, error) {
 		ID:        id,
 		CreatedAt: now,
 		ExpiresAt: now.Add(SessionTTL),
-		Shares:    make(map[int]*edwards25519.Scalar),
+		Shares:    make(map[int]*ristretto255.Scalar),
 		Threshold: threshold,
 	}
 	s.mu.Lock()
@@ -77,7 +77,7 @@ func (s *Store) Get(id string) (*Session, bool) {
 // AddShare adds a trustee's key share to a session.
 // Returns the number of shares received and whether the threshold has been newly met.
 // Idempotent: if the trustee already submitted, returns the current count without error.
-func (s *Store) AddShare(sessionID string, trusteeIndex int, share *edwards25519.Scalar) (sharesReceived int, thresholdMet bool, err error) {
+func (s *Store) AddShare(sessionID string, trusteeIndex int, share *ristretto255.Scalar) (sharesReceived int, thresholdMet bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -102,7 +102,7 @@ func (s *Store) AddShare(sessionID string, trusteeIndex int, share *edwards25519
 }
 
 // SetCodes stores the generated codes and master secret on the session.
-func (s *Store) SetCodes(sessionID string, codes map[string]string, masterSecret *edwards25519.Scalar) {
+func (s *Store) SetCodes(sessionID string, codes map[string]string, masterSecret *ristretto255.Scalar) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[sessionID]
@@ -123,12 +123,12 @@ func (s *Store) Close(sessionID string) {
 	}
 	// Zero master secret
 	if sess.MasterSecret != nil {
-		zero := edwards25519.NewScalar()
+		zero := ristretto255.NewScalar()
 		sess.MasterSecret.Set(zero)
 		sess.MasterSecret = nil
 	}
 	// Zero individual shares
-	zero := edwards25519.NewScalar()
+	zero := ristretto255.NewScalar()
 	for idx, share := range sess.Shares {
 		share.Set(zero)
 		delete(sess.Shares, idx)
@@ -188,12 +188,12 @@ func (s *Store) removeExpired() {
 		if now.After(sess.ExpiresAt) {
 			// Zero master secret
 			if sess.MasterSecret != nil {
-				zero := edwards25519.NewScalar()
+				zero := ristretto255.NewScalar()
 				sess.MasterSecret.Set(zero)
 				sess.MasterSecret = nil
 			}
 			// Zero individual shares
-			zero := edwards25519.NewScalar()
+			zero := ristretto255.NewScalar()
 			for _, share := range sess.Shares {
 				share.Set(zero)
 			}

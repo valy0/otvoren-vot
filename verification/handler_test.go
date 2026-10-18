@@ -15,7 +15,10 @@ import (
 var testParties = []string{"ГЕРБ", "ПП-ДБ", "ДПС", "БСП"}
 
 func newDevHandler() *VerificationHandler {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		panic("NewDealer failed: " + err.Error())
+	}
 	return &VerificationHandler{
 		sessions:  session.NewStore(),
 		parties:   testParties,
@@ -25,7 +28,10 @@ func newDevHandler() *VerificationHandler {
 }
 
 func newProdHandler() (*VerificationHandler, *threshold.Dealer) {
-	dealer := threshold.NewDealer(3, 5)
+	dealer, err := threshold.NewDealer(3, 5)
+	if err != nil {
+		panic("NewDealer failed: " + err.Error())
+	}
 	return &VerificationHandler{
 		sessions:  session.NewStore(),
 		parties:   testParties,

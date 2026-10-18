@@ -53,7 +53,11 @@ func main() {
 	if cfg.DevMode {
 		slog.Warn("dev mode: running local DKG for development secret",
 			"threshold", cfg.TrusteeThreshold, "total", cfg.TrusteeTotal)
-		dealer := threshold.NewDealer(cfg.TrusteeThreshold, cfg.TrusteeTotal)
+		dealer, err := threshold.NewDealer(cfg.TrusteeThreshold, cfg.TrusteeTotal)
+		if err != nil {
+			slog.Error("dev mode DKG failed", "error", err)
+			os.Exit(1)
+		}
 		handler.devSecret = dealer.Secret()
 	}
 

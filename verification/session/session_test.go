@@ -5,16 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"filippo.io/edwards25519"
+	"github.com/gtank/ristretto255"
 )
 
 // randomScalar generates a cryptographically random scalar for testing.
-func randomScalar() *edwards25519.Scalar {
+func randomScalar() *ristretto255.Scalar {
 	var buf [64]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		panic("crypto/rand failed: " + err.Error())
 	}
-	s, err := edwards25519.NewScalar().SetUniformBytes(buf[:])
+	s, err := ristretto255.NewScalar().SetUniformBytes(buf[:])
 	if err != nil {
 		panic("SetUniformBytes failed: " + err.Error())
 	}
@@ -223,10 +223,10 @@ func TestCleanupRemovesExpired(t *testing.T) {
 	}
 }
 
-// Verify that edwards25519.Scalar.Set works as expected for zeroing.
+// Verify that ristretto255.Scalar.Set works as expected for zeroing.
 func TestScalarZeroing(t *testing.T) {
 	secret := randomScalar()
-	zero := edwards25519.NewScalar()
+	zero := ristretto255.NewScalar()
 	secret.Set(zero)
 	if secret.Equal(zero) != 1 {
 		t.Fatal("scalar should be zero after Set(zero)")
