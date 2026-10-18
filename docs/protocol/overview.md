@@ -135,6 +135,7 @@ The bulletin board maintains **two parallel Merkle trees**, both computed on eve
 - **Hash function:** SHA-256 (NIST standard, universally implemented)
 - **Who verifies:** Voters (via `verify.izbori.bg`), political parties, NGOs, media, independent auditors
 - **Properties:** Anyone with `sha256sum` can rebuild the tree from raw data and confirm the root
+- **Specification:** RFC 9162 §2.1; see [merkle.md](merkle.md)
 
 ### 4.2 Poseidon SNARK tree
 

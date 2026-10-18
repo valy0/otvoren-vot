@@ -56,6 +56,7 @@ The bulletin board maintains **two parallel Merkle trees**, computed on every ap
 - Used for all external verification: API responses, inclusion proofs, voter receipt verification
 - Canonical for public auditability
 - Any party can independently recompute this tree from the raw bulletin board data
+- RFC 9162 §2.1; see [merkle.md](merkle.md)
 
 ### 3.2 SNARK tree (Poseidon over BN254)
 
