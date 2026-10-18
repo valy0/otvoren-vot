@@ -1,7 +1,11 @@
 package crypto_test
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"testing"
+
+	"github.com/gtank/ristretto255"
 
 	"github.com/valy0/otvoren-vot/crypto/elgamal"
 	"github.com/valy0/otvoren-vot/crypto/internal"
@@ -16,6 +20,7 @@ func TestFullElectionSimulation(t *testing.T) {
 		thresh      = 5
 		numParties  = 5
 		numVoters   = 20
+		electionID  = "integration-election-2027"
 	)
 
 	// === PHASE 1: DKG ===
@@ -38,7 +43,16 @@ func TestFullElectionSimulation(t *testing.T) {
 		expectedTally[party]++
 
 		// Encode ballot
-		ballots[i] = elgamal.EncodeBallot(electionPK, numParties, party)
+		var err error
+		ballots[i], err = elgamal.EncodeBallot(electionPK, numParties, party)
+		if err != nil {
+			t.Fatalf("voter %d: EncodeBallot: %v", i, err)
+		}
+		idHash := sha256.Sum256([]byte{byte(i)})
+		ctx := proof.Context{
+			ElectionID: electionID,
+			BallotID:   base64.RawURLEncoding.EncodeToString(idHash[:]),
+		}
 
 		// Verify binary proofs for each party element
 		for j := range numParties {
@@ -46,17 +60,25 @@ func TestFullElectionSimulation(t *testing.T) {
 			if j == party {
 				m = 1
 			}
-			bp := proof.ProveBinary(electionPK, ballots[i].PartyVector[j], m, ballots[i].PartyRandomness[j])
-			if !proof.VerifyBinary(electionPK, ballots[i].PartyVector[j], bp) {
-				t.Fatalf("voter %d, party %d: binary proof failed", i, j)
+			ctx.Index = uint32(j)
+			bp, err := proof.ProveBinary(ctx, electionPK, ballots[i].PartyVector[j], m, ballots[i].PartyRandomness[j])
+			if err != nil {
+				t.Fatalf("voter %d, party %d: ProveBinary: %v", i, j, err)
+			}
+			if err := proof.VerifyBinary(ctx, electionPK, ballots[i].PartyVector[j], bp); err != nil {
+				t.Fatalf("voter %d, party %d: binary proof failed: %v", i, j, err)
 			}
 		}
 
 		// Verify sum-to-one proof
 		rSum := internal.SumScalars(ballots[i].PartyRandomness)
-		sp := proof.ProveSumOne(electionPK, ballots[i].PartyVector, rSum)
-		if !proof.VerifySumOne(electionPK, ballots[i].PartyVector, sp) {
-			t.Fatalf("voter %d: sum-to-one proof failed", i)
+		ctx.Index = numParties
+		sp, err := proof.ProveSumOne(ctx, electionPK, ballots[i].PartyVector, rSum)
+		if err != nil {
+			t.Fatalf("voter %d: ProveSumOne: %v", i, err)
+		}
+		if err := proof.VerifySumOne(ctx, electionPK, ballots[i].PartyVector, sp); err != nil {
+			t.Fatalf("voter %d: sum-to-one proof failed: %v", i, err)
 		}
 
 		// Append to Merkle tree (using ballot index as simplified ID)
@@ -79,29 +101,45 @@ func TestFullElectionSimulation(t *testing.T) {
 
 	// === PHASE 4: HOMOMORPHIC TALLYING ===
 	t.Log("Phase 4: Homomorphic Tallying")
-	tally := elgamal.TallyBallots(ballots)
+	tally, err := elgamal.TallyBallots(ballots)
+	if err != nil {
+		t.Fatalf("TallyBallots: %v", err)
+	}
 	t.Logf("  Tally computed (element-wise multiplication of %d ballots)", numVoters)
 
 	// === PHASE 5: THRESHOLD DECRYPTION ===
 	t.Log("Phase 5: Threshold Decryption (5-of-9 trustees)")
 	trusteeIndices := []int{1, 3, 5, 7, 9} // arbitrary subset of 5
 
+	keys := make(map[int]*ristretto255.Element, numTrustees)
+	for _, p := range dkg.Participants {
+		keys[p.ID] = p.VerificationKey
+	}
+	tallyDigest := threshold.TallyDigest(tally.PartyVector)
+
 	for partyIdx := range numParties {
-		partials := make([]*threshold.PartialDecryption, thresh)
+		sc := threshold.SlotContext{
+			ElectionID:  electionID,
+			SlotIndex:   uint32(partyIdx),
+			TallyDigest: tallyDigest,
+		}
+		partials := make([]*threshold.Partial, thresh)
 		for i, idx := range trusteeIndices {
 			p := dkg.Participants[idx-1]
-			partials[i] = threshold.PartialDecryptWithProof(
-				p.CombinedShare,
-				tally.PartyVector[partyIdx],
-				p.VerificationKey,
-			)
+			partials[i], err = threshold.PartialDecrypt(sc, p.ID, p.CombinedShare, tally.PartyVector[partyIdx])
+			if err != nil {
+				t.Fatalf("party %d, trustee %d: PartialDecrypt: %v", partyIdx, idx, err)
+			}
 			// Verify each trustee's proof
-			if !threshold.VerifyPartialDecryption(tally.PartyVector[partyIdx], partials[i], p.VerificationKey) {
-				t.Fatalf("party %d, trustee %d: partial decryption proof failed", partyIdx, idx)
+			if err := threshold.VerifyPartial(sc, tally.PartyVector[partyIdx], partials[i], p.VerificationKey); err != nil {
+				t.Fatalf("party %d, trustee %d: partial decryption proof failed: %v", partyIdx, idx, err)
 			}
 		}
 
-		result := threshold.CombinePartials(tally.PartyVector[partyIdx], partials, trusteeIndices, 100)
+		result, err := threshold.Combine(sc, tally.PartyVector[partyIdx], partials, keys, thresh, 100)
+		if err != nil {
+			t.Fatalf("party %d: Combine: %v", partyIdx, err)
+		}
 		if result != expectedTally[partyIdx] {
 			t.Fatalf("party %d: expected %d votes, got %d", partyIdx, expectedTally[partyIdx], result)
 		}
