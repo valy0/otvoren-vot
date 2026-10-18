@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { initSodium, getSodium } from '../sodium'
 import {
   encrypt,
+  encryptWithRandomness,
   homomorphicAdd,
   serializeCiphertext,
   deserializeCiphertext,
@@ -62,6 +63,41 @@ describe('encrypt', () => {
   })
 })
 
+describe('encryptWithRandomness', () => {
+  it('throws unless messageBit is exactly 0 or 1 (encrypt shares the path)', () => {
+    const { pk } = makeKeyPair()
+    const r = getSodium().crypto_core_ristretto255_scalar_random()
+    for (const bad of [2, -1, 0.5, Number.NaN]) {
+      expect(() => encryptWithRandomness(bad as 0 | 1, r, pk)).toThrow()
+      expect(() => encrypt(bad as 0 | 1, pk)).toThrow()
+    }
+    expect(() => encryptWithRandomness(0, r, pk)).not.toThrow()
+    expect(() => encryptWithRandomness(1, r, pk)).not.toThrow()
+  })
+
+  // libsodium's scalarmult clears bit 255 of r while its scalar arithmetic
+  // reduces r mod ℓ, so a non-canonical r would give a ciphertext that does not
+  // match the randomness the proofs use.
+  it('throws unless r is a canonical scalar (< ℓ, 32 bytes)', () => {
+    const { pk } = makeKeyPair()
+    const groupOrder = hexToBytes('edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010')
+    const orderPlusOne = groupOrder.slice()
+    orderPlusOne[0] += 1
+    const bit255 = getSodium().crypto_core_ristretto255_scalar_random()
+    bit255[31] |= 0x80
+    for (const bad of [groupOrder, orderPlusOne, bit255, new Uint8Array(32).fill(0xff), new Uint8Array(31), new Uint8Array(33)]) {
+      expect(() => encryptWithRandomness(0, bad, pk)).toThrow(/canonical/)
+      expect(() => encryptWithRandomness(1, bad, pk)).toThrow(/canonical/)
+    }
+  })
+
+  it('throws for r = 0, which would make c1 the identity and reveal the plaintext', () => {
+    const { pk } = makeKeyPair()
+    expect(() => encryptWithRandomness(0, new Uint8Array(32), pk)).toThrow()
+    expect(() => encryptWithRandomness(1, new Uint8Array(32), pk)).toThrow()
+  })
+})
+
 describe('homomorphicAdd', () => {
   it('produces a valid 32-byte ciphertext', () => {
     const { pk } = makeKeyPair()
@@ -104,6 +140,13 @@ describe('serialize / deserialize', () => {
   it('throws on invalid hex length', () => {
     expect(() => deserializeCiphertext('deadbeef')).toThrow()
   })
+
+  it('throws on a non-hex character', () => {
+    const { pk } = makeKeyPair()
+    const hex = serializeCiphertext(encrypt(1, pk).ciphertext)
+    expect(() => deserializeCiphertext('zz' + hex.slice(2))).toThrow(/hex/)
+    expect(() => deserializeCiphertext(hex.slice(0, 64) + '+' + hex.slice(65))).toThrow(/hex/)
+  })
 })
 
 describe('bytesToHex / hexToBytes', () => {
@@ -115,5 +158,14 @@ describe('bytesToHex / hexToBytes', () => {
   it('produces lowercase hex', () => {
     const bytes = new Uint8Array([0xab, 0xcd, 0xef])
     expect(bytesToHex(bytes)).toBe('abcdef')
+  })
+
+  // parseInt would read 'zz' as NaN (stored as 0), ' f' and '+f' as 15, '-1' as 255.
+  it('hexToBytes throws on odd length or any non-hex character', () => {
+    for (const bad of ['zz', '0g', 'abc', ' f', '+f', '-1', '0x12', 'ab cd']) {
+      expect(() => hexToBytes(bad), bad).toThrow(/[Hh]ex/)
+    }
+    expect(hexToBytes('')).toEqual(new Uint8Array(0))
+    expect(hexToBytes('ABcd09')).toEqual(new Uint8Array([0xab, 0xcd, 0x09]))
   })
 })

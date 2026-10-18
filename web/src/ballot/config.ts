@@ -1,3 +1,5 @@
+import { hexToBytes } from '../crypto/hex'
+
 // ---------------------------------------------------------------------------
 // Election configuration — fetched from the Bulletin Board
 // ---------------------------------------------------------------------------
@@ -55,6 +57,10 @@ export async function fetchElectionConfig(bbUrl: string): Promise<ElectionConfig
   if (!data || typeof data.election_id !== 'string' || typeof data.public_key !== 'string') {
     throw new Error('Bulletin Board response is missing required fields (election_id, public_key)')
   }
+  if (data.election_id.length === 0) {
+    // Every ballot proof is bound to the election id; an empty one cannot be proved.
+    throw new Error('Bulletin Board response has an empty election_id')
+  }
   if (!Array.isArray(data.parties)) {
     throw new Error('Bulletin Board response is missing parties array')
   }
@@ -88,13 +94,13 @@ export async function fetchElectionConfig(bbUrl: string): Promise<ElectionConfig
  * the digest (hex) against the expected hash.
  */
 async function verifyPublicKeyHash(publicKeyHex: string, expectedHashHex: string): Promise<void> {
-  // Decode hex → raw bytes
-  if (publicKeyHex.length % 2 !== 0) {
-    throw new Error('CRITICAL: Election public key verification failed — invalid hex length')
-  }
-  const bytes = new Uint8Array(publicKeyHex.length / 2)
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(publicKeyHex.slice(i * 2, i * 2 + 2), 16)
+  // Decode hex → raw bytes, strictly: malformed hex must not decode to some
+  // other key's bytes (parseInt reads "zz" as 0).
+  let bytes: Uint8Array<ArrayBuffer>
+  try {
+    bytes = hexToBytes(publicKeyHex)
+  } catch (err) {
+    throw new Error(`CRITICAL: Election public key verification failed — ${(err as Error).message}`)
   }
 
   // SHA-256 via Web Crypto API (available in all target environments)

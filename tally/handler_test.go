@@ -1056,6 +1056,10 @@ func TestPartialDecryptionBeforeCeremonyReachesAwaitingTrustees(t *testing.T) {
 	if errObj["code"] != "wrong_phase" {
 		t.Errorf("expected code wrong_phase, got %v", errObj["code"])
 	}
+
+	// Let the ceremony finish its last state save before t.TempDir is removed;
+	// otherwise the cleanup races the journal write ("directory not empty").
+	pollUntilPhase(t, srv, ceremonyID, PhaseAwaitingTrustees, 10*time.Second)
 }
 
 func TestFinalizeBeforeDecryption(t *testing.T) {
